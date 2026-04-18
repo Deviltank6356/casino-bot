@@ -72,3 +72,4 @@ client.on("interactionCreate", async (i) => {
 });
 
 client.login(require("./config.json").token);
+require("./auth");
