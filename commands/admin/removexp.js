@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require("discord.js");
-const isAdmin = require("../../utils/isAdmin");
-const xp = require("../../systems/multipliers/xpMultiplier");
+const path = require("path");
+const isAdmin = require(path.join(__dirname, "../../utils/isAdmin"));
+const money = require(path.join(__dirname, "../../systems/multipliers/XPMultiplier"));
 
 module.exports = {
   data: new SlashCommandBuilder()
