@@ -6,7 +6,7 @@ const app = express();
 const spotify = new SpotifyWebApi({
   clientId: "bf81e117c0314819a3f9877ca8b3f157",
   clientSecret: "d8e2260efcf94c9a874d2c3198263c36",
-  redirectUri: "http://79.72.92.17:3000/callback"
+  redirectUri: "https://brands-games-serving-vista.trycloudflare.com/callback"
 });
 
 // LOGIN
