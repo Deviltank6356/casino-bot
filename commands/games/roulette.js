@@ -5,8 +5,18 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("roulette")
     .setDescription("Play roulette")
-    .addIntegerOption(o => o.setName("bet").setRequired(true))
-    .addIntegerOption(o => o.setName("number").setRequired(true)),
+    .addIntegerOption(o =>
+      o
+        .setName("bet")
+        .setDescription("Amount to bet")
+        .setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o
+        .setName("number")
+        .setDescription("Pick a number (0–36)")
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
     const bet = interaction.options.getInteger("bet");
