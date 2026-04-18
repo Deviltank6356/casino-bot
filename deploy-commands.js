@@ -14,29 +14,33 @@ function loadCommands(dir) {
   for (const file of files) {
     const fullPath = path.join(dir, file);
 
-    if (fs.lstatSync(fullPath).isDirectory()) {
-      loadCommands(fullPath);
-    } else {
-      console.log("Loading:", fullPath);
+    try {
+      if (fs.lstatSync(fullPath).isDirectory()) {
+        loadCommands(fullPath);
+        continue;
+      }
+
+      // console.log("📄 Loading:", fullPath); // DEBUG (disabled)
 
       const command = require(fullPath);
 
       if (!command?.data) {
-        console.log("❌ NO DATA:", fullPath);
+        // console.log("❌ NO DATA:", fullPath); // DEBUG (disabled)
         continue;
       }
 
-      if (!command.data.toJSON) {
-        console.log("❌ INVALID COMMAND STRUCTURE:", fullPath);
+      if (typeof command.data.toJSON !== "function") {
+        // console.log("❌ INVALID COMMAND STRUCTURE:", fullPath); // DEBUG (disabled)
         continue;
       }
 
-      try {
-        commands.push(command.data.toJSON());
-      } catch (err) {
-        console.log("💥 CRASHING FILE:", fullPath);
-        throw err;
-      }
+      commands.push(command.data.toJSON());
+
+      // console.log("✅ Loaded command"); // DEBUG (disabled)
+
+    } catch (err) {
+      console.error("💥 Failed loading command:", fullPath);
+      console.error(err);
     }
   }
 }
@@ -49,19 +53,19 @@ loadCommands(path.join(__dirname, "commands"));
 const rest = new REST({ version: "10" }).setToken(config.token);
 
 // =============================
-// DEPLOY FUNCTION
+// DEPLOY COMMANDS
 // =============================
 (async () => {
   try {
     console.log(`🚀 Deploying ${commands.length} slash commands...`);
 
-    await rest.put(
+    const result = await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
       { body: commands }
     );
 
-    console.log("✅ Slash commands deployed successfully!");
+    console.log(`✅ Deployed ${result.length} commands`);
   } catch (error) {
-    console.error("❌ Failed to deploy commands:", error);
+    console.error("❌ Deploy failed:", error);
   }
 })();
