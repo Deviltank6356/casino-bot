@@ -23,14 +23,23 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("blackjack")
     .setDescription("Play interactive blackjack")
-    .addIntegerOption(o => o.setName("bet").setRequired(true)),
+    .addIntegerOption(o =>
+      o
+        .setName("bet")
+        .setDescription("Amount to bet")
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
     const bet = interaction.options.getInteger("bet");
     const user = getUser(interaction.user.id);
 
-    if (user.money < bet)
-      return interaction.reply("❌ Not enough money.");
+    if (user.money < bet) {
+      return interaction.reply({
+        content: "❌ Not enough money.",
+        ephemeral: true
+      });
+    }
 
     const game = manager.createGame(interaction.user.id, bet);
 
@@ -46,7 +55,7 @@ module.exports = {
         .setStyle(ButtonStyle.Danger)
     );
 
-    await interaction.reply({
+    return interaction.reply({
       content: format(game),
       components: [row]
     });
