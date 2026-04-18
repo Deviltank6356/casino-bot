@@ -6,10 +6,10 @@ const app = express();
 const spotify = new SpotifyWebApi({
   clientId: "bf81e117c0314819a3f9877ca8b3f157",
   clientSecret: "d8e2260efcf94c9a874d2c3198263c36",
-  redirectUri: "https://79.72.92.17:3000/callback"
+  redirectUri: "http://79.72.92.17:3000/callback"
 });
 
-// STEP 1: login URL
+// LOGIN
 app.get("/login", (req, res) => {
   const scopes = [
     "user-read-currently-playing",
@@ -21,20 +21,26 @@ app.get("/login", (req, res) => {
   res.redirect(url);
 });
 
-// STEP 2: callback
+// CALLBACK
 app.get("/callback", async (req, res) => {
-  const code = req.query.code;
+  try {
+    const code = req.query.code;
 
-  const data = await spotify.authorizationCodeGrant(code);
+    const data = await spotify.authorizationCodeGrant(code);
 
-  const refreshToken = data.body.refresh_token;
+    const refreshToken = data.body.refresh_token;
 
-  console.log("YOUR REFRESH TOKEN:");
-  console.log(refreshToken);
+    console.log("REFRESH TOKEN:");
+    console.log(refreshToken);
 
-  res.send("Check console for refresh token");
+    res.send("Success — check console");
+  } catch (err) {
+    console.error(err);
+    res.send("Auth failed");
+  }
 });
 
-app.listen(3000, () => {
-  console.log("Go to http://localhost:3000/login");
+// IMPORTANT FIX
+app.listen(3000, "0.0.0.0", () => {
+  console.log("Go to http://79.72.92.17:3000/login");
 });
