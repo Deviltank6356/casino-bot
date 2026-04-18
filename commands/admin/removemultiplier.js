@@ -7,11 +7,16 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("removemoneyboost")
     .setDescription("Remove a money multiplier boost")
-    .addNumberOption(o => o.setName("multiplier").setRequired(true)),
+    .addNumberOption(o =>
+      o
+        .setName("multiplier")
+        .setDescription("Multiplier value to remove")
+        .setRequired(true)
+    ),
 
   async execute(i) {
     if (!isAdmin(i.user.id))
-      return i.reply("No permission");
+      return i.reply({ content: "No permission", ephemeral: true });
 
     money.removeMultiplier(i.options.getNumber("multiplier"));
 
