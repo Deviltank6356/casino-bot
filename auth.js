@@ -42,5 +42,5 @@ app.get("/callback", async (req, res) => {
 
 // IMPORTANT FIX
 app.listen(3000, "0.0.0.0", () => {
-  console.log("Go to https://solving-final-fort-crystal.trycloudflare.com/login");
+  console.log("Go to http://solving-final-fort-crystal.trycloudflare.com/login");
 });
