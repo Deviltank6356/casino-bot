@@ -3,6 +3,7 @@ const config = require("./config.json");
 
 const db = new Database("casino.db");
 
+// create table
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -27,8 +28,10 @@ function getUser(id) {
       joinedAt: Date.now()
     };
 
-    db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)")
-      .run(user.id, user.money, user.xp, user.level, user.bank, user.joinedAt);
+    db.prepare(`
+      INSERT INTO users (id, money, xp, level, bank, joinedAt)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(user.id, user.money, user.xp, user.level, user.bank, user.joinedAt);
   }
 
   return user;
@@ -36,8 +39,10 @@ function getUser(id) {
 
 function saveUser(u) {
   db.prepare(`
-    UPDATE users SET money=?, xp=?, level=?, bank=? WHERE id=?
+    UPDATE users
+    SET money=?, xp=?, level=?, bank=?
+    WHERE id=?
   `).run(u.money, u.xp, u.level, u.bank, u.id);
 }
 
-module.exports = { getUser, saveUser };
+module.exports = { getUser, saveUser, db };
