@@ -1,20 +1,37 @@
 const { SlashCommandBuilder } = require("discord.js");
-const path = require("path");
-const isAdmin = require(path.join(__dirname, "../../utils/isAdmin"));
-const money = require(path.join(__dirname, "../../systems/multipliers/XPMultiplier"));
+const isAdmin = require("../../utils/isAdmin");
+const { getUser, saveUser } = require("../../db");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("removexpboost")
-    .setDescription("Remove XP multiplier boost")
-    .addNumberOption(o => o.setName("multiplier").setRequired(true)),
+    .setName("removexp")
+    .setDescription("Remove XP from a user")
+    .addUserOption(o =>
+      o
+        .setName("user")
+        .setDescription("User to remove XP from")
+        .setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o
+        .setName("amount")
+        .setDescription("XP amount to remove")
+        .setRequired(true)
+    ),
 
   async execute(i) {
     if (!isAdmin(i.user.id))
-      return i.reply("No permission");
+      return i.reply({ content: "❌ No permission", ephemeral: true });
 
-    xp.removeMultiplier(i.options.getNumber("multiplier"));
+    const user = getUser(i.options.getUser("user").id);
+    const amount = i.options.getInteger("amount");
 
-    i.reply("⭐ Boost removed");
+    user.xp -= amount;
+
+    if (user.xp < 0) user.xp = 0;
+
+    saveUser(user);
+
+    i.reply(`⭐ Removed ${amount} XP`);
   }
 };

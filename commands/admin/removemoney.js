@@ -5,15 +5,29 @@ const { getUser, saveUser } = require("../../db");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("removemoney")
-    .addUserOption(o => o.setName("user").setRequired(true))
-    .addIntegerOption(o => o.setName("amount").setRequired(true))
-    .setDescription("Remove money"),
+    .setDescription("Remove money from a user")
+    .addUserOption(o =>
+      o
+        .setName("user")
+        .setDescription("User to remove money from")
+        .setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o
+        .setName("amount")
+        .setDescription("Amount to remove")
+        .setRequired(true)
+    ),
 
   async execute(i) {
-    if (!isAdmin(i.user.id)) return i.reply("No perms");
+    if (!isAdmin(i.user.id))
+      return i.reply({ content: "No perms", ephemeral: true });
 
     const u = getUser(i.options.getUser("user").id);
-    u.money -= i.options.getInteger("amount");
+    const amount = i.options.getInteger("amount");
+
+    u.money -= amount;
+
     saveUser(u);
 
     i.reply("Done");
