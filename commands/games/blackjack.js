@@ -10,66 +10,65 @@ const { getUser } = require("../../db");
 
 function format(game) {
   return (
-    `🃏 **BLACKJACK**\n` +
+    `🃏 **BLACKJACK VS DEALER**\n` +
     `━━━━━━━━━━━━━━\n` +
-    `🧑 You: **${game.player}**\n` +
-    `🎩 Dealer: **${game.dealer}**\n` +
-    `💰 Bet: **${game.bet}**\n` +
-    `━━━━━━━━━━━━━━`
+    `🧑 You: ${game.player}\n` +
+    `🎩 Dealer: ${game.dealer}\n` +
+    `💰 Bet: ${game.bet}\n`
   );
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("blackjack")
-    .setDescription("Play interactive blackjack")
+    .setDescription("Play blackjack vs dealer")
     .addIntegerOption(o =>
-      o
-        .setName("bet")
+      o.setName("bet")
         .setDescription("Amount to bet")
         .setRequired(true)
     ),
 
   async execute(interaction) {
-    console.log("🃏 BLACKJACK COMMAND TRIGGERED");
+    try {
+      const bet = interaction.options.getInteger("bet");
+      const user = getUser(interaction.user.id);
 
-    const bet = interaction.options.getInteger("bet");
-    console.log("💰 BET:", bet);
+      if (!user) {
+        return interaction.reply({ content: "❌ User not found", ephemeral: true });
+      }
 
-    const user = getUser(interaction.user.id);
-    console.log("👤 USER:", user);
+      if (user.money < bet) {
+        return interaction.reply({ content: "❌ Not enough money", ephemeral: true });
+      }
 
-    if (!user) {
-      console.log("❌ USER NOT FOUND");
-      return interaction.reply("User data missing.");
-    }
+      const game = manager.start(interaction.user.id, bet);
 
-    if (user.money < bet) {
-      console.log("❌ NOT ENOUGH MONEY");
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("hit")
+          .setLabel("Hit")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("stand")
+          .setLabel("Stand")
+          .setStyle(ButtonStyle.Danger)
+      );
+
       return interaction.reply({
-        content: "❌ Not enough money.",
-        ephemeral: true
+        content: format(game),
+        components: [row]
       });
+
+    } catch (err) {
+      console.error("BLACKJACK ERROR:", err);
+
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Command failed",
+          ephemeral: true
+        });
+      }
     }
-
-    const game = manager.createGame(interaction.user.id, bet);
-    console.log("🎮 GAME CREATED:", game);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("hit")
-        .setLabel("Hit")
-        .setStyle(ButtonStyle.Primary),
-
-      new ButtonBuilder()
-        .setCustomId("stand")
-        .setLabel("Stand")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    return interaction.reply({
-      content: format(game),
-      components: [row]
-    });
   }
 };

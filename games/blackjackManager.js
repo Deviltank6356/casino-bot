@@ -5,53 +5,77 @@ const games = new Map();
 const draw = () => Math.floor(Math.random() * 10) + 1;
 
 function start(id, bet) {
-  games.set(id, {
+  const game = {
     player: draw() + draw(),
     dealer: draw() + draw(),
     bet,
-    over: false
-  });
+    over: false,
+    result: null
+  };
 
-  return games.get(id);
+  games.set(id, game);
+  return game;
 }
 
 function hit(id) {
   const g = games.get(id);
-  if (!g) return null;
+  if (!g || g.over) return null;
 
   g.player += draw();
 
-  if (g.player > 21) end(id, "lose");
+  if (g.player > 21) {
+    return end(id, "lose");
+  }
 
   return g;
 }
 
 function stand(id) {
   const g = games.get(id);
-  if (!g) return null;
+  if (!g || g.over) return null;
 
-  while (g.dealer < 17) g.dealer += draw();
+  // 🧠 dealer AI (casino logic)
+  while (g.dealer < 17) {
+    const card = draw();
 
-  if (g.dealer > 21 || g.player > g.dealer) end(id, "win");
-  else if (g.player === g.dealer) end(id, "push");
-  else end(id, "lose");
+    // small realism: dealer sometimes holds on 16-17
+    if (g.dealer >= 16 && Math.random() < 0.25) break;
+
+    g.dealer += card;
+  }
+
+  if (g.dealer > 21) return end(id, "win");
+  if (g.player > g.dealer) return end(id, "win");
+  if (g.player === g.dealer) return end(id, "push");
+  return end(id, "lose");
+}
+
+function end(id, result) {
+  const g = games.get(id);
+  if (!g || g.over) return null;
+
+  const user = getUser(id);
+
+  if (result === "win") user.money += g.bet;
+  if (result === "lose") user.money -= g.bet;
+
+  saveUser(user);
+
+  g.result = result;
+  g.over = true;
+
+  setTimeout(() => games.delete(id), 15000);
 
   return g;
 }
 
-function end(id, r) {
-  const g = games.get(id);
-  const u = getUser(id);
-
-  if (r === "win") u.money += g.bet;
-  if (r === "lose") u.money -= g.bet;
-
-  saveUser(u);
-
-  g.result = r;
-  g.over = true;
-
-  setTimeout(() => games.delete(id), 10000);
+function getGame(id) {
+  return games.get(id);
 }
 
-module.exports = { start, hit, stand };
+module.exports = {
+  start,
+  hit,
+  stand,
+  getGame
+};
