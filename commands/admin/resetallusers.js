@@ -8,19 +8,46 @@ module.exports = {
     .setName("removexpboost")
     .setDescription("Remove an active XP multiplier boost")
     .addNumberOption(o =>
-      o.setName("multiplier").setDescription("XP multiplier").setRequired(true)
+      o
+        .setName("multiplier")
+        .setDescription("XP multiplier (e.g. 2 = 2x)")
+        .setRequired(true)
     ),
 
   async execute(i, client) {
-    if (!isAdmin(i.user.id))
-      return i.reply({ content: "No permission", ephemeral: true });
+    try {
+      if (!isAdmin(i.user.id)) {
+        return i.reply({ content: "No permission", ephemeral: true });
+      }
 
-    const mult = i.options.getNumber("multiplier");
+      const mult = i.options.getNumber("multiplier");
 
-    xp.removeMultiplier(mult);
+      if (!mult || mult <= 0) {
+        return i.reply({
+          content: "❌ Invalid multiplier",
+          ephemeral: true
+        });
+      }
 
-    await logAdminAction(client, i, "REMOVE XP BOOST", `Removed ${mult}x XP boost`);
+      xp.removeMultiplier(mult);
 
-    i.reply(`❌ Removed ${mult}x XP boost`);
+      // safe logging (prevents crash)
+      await logAdminAction(
+        client,
+        i,
+        "REMOVE XP BOOST",
+        `Removed ${mult}x XP boost`
+      ).catch(err => console.error("LOG ERROR:", err));
+
+      return i.reply(`❌ Removed ${mult}x XP boost`);
+
+    } catch (err) {
+      console.error("REMOVEXPBOOST ERROR:", err);
+
+      return i.reply({
+        content: "❌ Error removing XP boost",
+        ephemeral: true
+      });
+    }
   }
 };

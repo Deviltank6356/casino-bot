@@ -8,25 +8,60 @@ module.exports = {
     .setName("removexp")
     .setDescription("Remove XP from a user")
     .addUserOption(o =>
-      o.setName("user").setDescription("User").setRequired(true)
+      o
+        .setName("user")
+        .setDescription("User")
+        .setRequired(true)
     )
     .addIntegerOption(o =>
-      o.setName("amount").setDescription("XP amount").setRequired(true)
+      o
+        .setName("amount")
+        .setDescription("XP amount")
+        .setRequired(true)
     ),
 
   async execute(i, client) {
-    if (!isAdmin(i.user.id))
-      return i.reply({ content: "❌ No permission", ephemeral: true });
+    try {
+      if (!isAdmin(i.user.id)) {
+        return i.reply({ content: "❌ No permission", ephemeral: true });
+      }
 
-    const target = i.options.getUser("user");
-    const amount = i.options.getInteger("amount");
+      const target = i.options.getUser("user");
+      const amount = i.options.getInteger("amount");
 
-    const user = getUser(target.id);
-    user.xp = Math.max(0, user.xp - amount);
-    saveUser(user);
+      if (!target) {
+        return i.reply({ content: "❌ User not found", ephemeral: true });
+      }
 
-    await logAdminAction(client, i, "REMOVE XP", `-${amount} XP from ${target.tag}`);
+      if (!amount || amount <= 0) {
+        return i.reply({ content: "❌ Invalid amount", ephemeral: true });
+      }
 
-    i.reply(`⭐ Removed ${amount} XP`);
+      const user = getUser(target.id);
+      user.xp = Math.max(0, user.xp - amount);
+      saveUser(user);
+
+      // SAFE LOGGING (prevents crashes)
+      try {
+        await logAdminAction(
+          client,
+          i,
+          "REMOVE XP",
+          `-${amount} XP from ${target.tag} (${target.id})`
+        );
+      } catch (err) {
+        console.error("LOG ERROR:", err);
+      }
+
+      return i.reply(`⭐ Removed ${amount} XP`);
+
+    } catch (err) {
+      console.error("REMOVEXP ERROR:", err);
+
+      return i.reply({
+        content: "❌ Error removing XP",
+        ephemeral: true
+      });
+    }
   }
 };
