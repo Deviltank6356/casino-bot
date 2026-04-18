@@ -5,9 +5,19 @@ const { getUser, saveUser } = require("../../db");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("addxp")
-    .setDescription("Add XP")
-    .addUserOption(o => o.setName("user").setRequired(true))
-    .addIntegerOption(o => o.setName("amount").setRequired(true)),
+    .setDescription("Add XP to a user")
+    .addUserOption(o =>
+      o
+        .setName("user")
+        .setDescription("User to give XP to")
+        .setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o
+        .setName("amount")
+        .setDescription("XP amount to add")
+        .setRequired(true)
+    ),
 
   async execute(i) {
     if (!isAdmin(i.user.id))
