@@ -1,42 +1,26 @@
 const { SlashCommandBuilder } = require("discord.js");
-const fs = require("fs");
-const path = require("path");
-const config = require("../../config.json");
-
-const DB_PATH = path.join(__dirname, "../../users.json");
+const isAdmin = require("../../utils/isAdmin");
+const xp = require("../../systems/multipliers/xpMultiplier");
+const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("resetallusers")
-    .setDescription("⚠️ OWNER ONLY: Reset ALL user data")
-    .addStringOption(o =>
-      o
-        .setName("confirm")
-        .setDescription('Type "YES" to confirm wipe')
-        .setRequired(true)
+    .setName("removexpboost")
+    .setDescription("Remove an active XP multiplier boost")
+    .addNumberOption(o =>
+      o.setName("multiplier").setDescription("XP multiplier").setRequired(true)
     ),
 
-  async execute(interaction) {
-    // OWNER ONLY CHECK
-    if (interaction.user.id !== config.ownerId) {
-      return interaction.reply({
-        content: "❌ Only the bot owner can use this command.",
-        ephemeral: true
-      });
-    }
+  async execute(i, client) {
+    if (!isAdmin(i.user.id))
+      return i.reply({ content: "No permission", ephemeral: true });
 
-    const confirm = interaction.options.getString("confirm");
+    const mult = i.options.getNumber("multiplier");
 
-    if (confirm !== "YES") {
-      return interaction.reply({
-        content: "⚠️ You must type **YES** to confirm reset.",
-        ephemeral: true
-      });
-    }
+    xp.removeMultiplier(mult);
 
-    // Wipe database
-    fs.writeFileSync(DB_PATH, JSON.stringify({}, null, 2));
+    await logAdminAction(client, i, "REMOVE XP BOOST", `Removed ${mult}x XP boost`);
 
-    return interaction.reply("💥 ALL USER DATA HAS BEEN RESET BY OWNER.");
+    i.reply(`❌ Removed ${mult}x XP boost`);
   }
 };

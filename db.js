@@ -24,7 +24,6 @@ function getUser(id) {
       money: config.startingMoney,
       xp: 0,
       level: 0,
-      bank: 0,
       joinedAt: Date.now()
     };
 

@@ -1,35 +1,32 @@
 const { SlashCommandBuilder } = require("discord.js");
 const isAdmin = require("../../utils/isAdmin");
 const { getUser, saveUser } = require("../../db");
+const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("removebank")
-    .setDescription("Remove money from a user's bank")
+    .setName("addbank")
+    .setDescription("Add money to a user's bank")
     .addUserOption(o =>
-      o
-        .setName("user")
-        .setDescription("User to remove bank money from")
-        .setRequired(true)
+      o.setName("user").setDescription("User").setRequired(true)
     )
     .addIntegerOption(o =>
-      o
-        .setName("amount")
-        .setDescription("Amount to remove")
-        .setRequired(true)
+      o.setName("amount").setDescription("Amount").setRequired(true)
     ),
 
-  async execute(i) {
+  async execute(i, client) {
     if (!isAdmin(i.user.id))
       return i.reply({ content: "❌ No permission", ephemeral: true });
 
-    const user = getUser(i.options.getUser("user").id);
+    const target = i.options.getUser("user");
     const amount = i.options.getInteger("amount");
 
-    user.bank -= amount;
-
+    const user = getUser(target.id);
+    user.bank += amount;
     saveUser(user);
 
-    i.reply(`🏦 Removed ${amount} from bank`);
+    await logAdminAction(client, i, "ADD BANK", `+${amount} to ${target.tag}`);
+
+    i.reply(`🏦 Added ${amount} to bank`);
   }
 };

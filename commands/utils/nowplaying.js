@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require("discord.js");
-const spotify = require("../../services/spotify");
+const { nowPlaying } = require("../../services/spotify");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -8,19 +8,11 @@ module.exports = {
 
   async execute(i) {
     try {
-      if (!spotify.nowPlaying || typeof spotify.nowPlaying !== "function") {
-        console.error("❌ Spotify nowPlaying is missing or not a function");
-        return i.reply({
-          content: "❌ Spotify system is not configured correctly.",
-          ephemeral: true
-        });
-      }
+      const track = await nowPlaying();
 
-      const track = await spotify.nowPlaying();
-
-      if (!track) {
+      if (!track || track.error) {
         return i.reply({
-          content: "❌ You are not listening to anything on Spotify.",
+          content: "❌ Spotify is not connected or not configured correctly.",
           ephemeral: true
         });
       }
@@ -35,10 +27,10 @@ module.exports = {
       });
 
     } catch (err) {
-      console.error("❌ nowplaying command error:", err);
+      console.error("Spotify error:", err);
 
       return i.reply({
-        content: "❌ Failed to fetch Spotify data.",
+        content: "❌ Spotify system error.",
         ephemeral: true
       });
     }

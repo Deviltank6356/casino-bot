@@ -1,24 +1,25 @@
 const { SlashCommandBuilder } = require("discord.js");
-const path = require("path");
-const isAdmin = require(path.join(__dirname, "../../utils/isAdmin"));
-const money = require(path.join(__dirname, "../../systems/multipliers/moneyMultiplier"));
+const isAdmin = require("../../utils/isAdmin");
+const money = require("../../systems/multipliers/moneyMultiplier");
+const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("removemoneyboost")
     .setDescription("Remove a money multiplier boost")
     .addNumberOption(o =>
-      o
-        .setName("multiplier")
-        .setDescription("Multiplier value to remove")
-        .setRequired(true)
+      o.setName("multiplier").setDescription("Multiplier").setRequired(true)
     ),
 
-  async execute(i) {
+  async execute(i, client) {
     if (!isAdmin(i.user.id))
       return i.reply({ content: "No permission", ephemeral: true });
 
-    money.removeMultiplier(i.options.getNumber("multiplier"));
+    const mult = i.options.getNumber("multiplier");
+
+    money.removeMultiplier(mult);
+
+    await logAdminAction(client, i, "REMOVE BOOST", `Removed ${mult}x money boost`);
 
     i.reply("💰 Boost removed");
   }
