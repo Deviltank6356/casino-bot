@@ -31,10 +31,21 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    console.log("🃏 BLACKJACK COMMAND TRIGGERED");
+
     const bet = interaction.options.getInteger("bet");
+    console.log("💰 BET:", bet);
+
     const user = getUser(interaction.user.id);
+    console.log("👤 USER:", user);
+
+    if (!user) {
+      console.log("❌ USER NOT FOUND");
+      return interaction.reply("User data missing.");
+    }
 
     if (user.money < bet) {
+      console.log("❌ NOT ENOUGH MONEY");
       return interaction.reply({
         content: "❌ Not enough money.",
         ephemeral: true
@@ -42,6 +53,7 @@ module.exports = {
     }
 
     const game = manager.createGame(interaction.user.id, bet);
+    console.log("🎮 GAME CREATED:", game);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
