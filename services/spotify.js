@@ -4,48 +4,43 @@ const config = require("../config.json");
 const spotify = new SpotifyWebApi({
   clientId: config.spotify.clientId,
   clientSecret: config.spotify.clientSecret,
-  refreshToken: config.spotify.refreshToken,
+  refreshToken: config.spotify.refreshToken
 });
 
 async function refreshToken() {
-  try {
-    const data = await spotify.refreshAccessToken();
-    spotify.setAccessToken(data.body.access_token);
-  } catch (err) {
-    console.error("Spotify refresh failed:", err.message);
-  }
+  const data = await spotify.refreshAccessToken();
+  spotify.setAccessToken(data.body.access_token);
 }
 
-async function getPlayback() {
+async function getNowPlaying() {
   try {
     await refreshToken();
 
-    const res = await spotify.getMyCurrentPlaybackState();
+    const res = await spotify.getMyCurrentPlayingTrack();
 
     if (!res.body || !res.body.item) {
       return {
-        playing: false,
-        text: "Nothing is currently playing."
+        isPlaying: false,
+        text: "Nothing currently playing"
       };
     }
 
     const track = res.body.item;
 
     return {
-      playing: res.body.is_playing,
+      isPlaying: res.body.is_playing,
       name: track.name,
       artist: track.artists.map(a => a.name).join(", "),
-      url: track.external_urls.spotify,
+      url: track.external_urls.spotify
     };
 
   } catch (err) {
-    console.error("Spotify API error:", err.message);
-
+    console.error("Spotify error:", err?.body || err.message || err);
     return {
-      playing: false,
-      text: "Unable to fetch playback (Spotify API blocked or expired token)."
+      isPlaying: false,
+      text: "Spotify API error"
     };
   }
 }
 
-module.exports = { getPlayback };
+module.exports = { getNowPlaying };
