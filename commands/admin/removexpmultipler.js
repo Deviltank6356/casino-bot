@@ -4,18 +4,12 @@ const xp = require("../../systems/multipliers/xpMultiplier");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("addxpboost")
-    .setDescription("Add XP multiplier boost")
+    .setName("removexpboost")
+    .setDescription("Remove an active XP multiplier boost")
     .addNumberOption(o =>
       o
         .setName("multiplier")
-        .setDescription("XP multiplier (e.g. 2 for 2x)")
-        .setRequired(true)
-    )
-    .addIntegerOption(o =>
-      o
-        .setName("minutes")
-        .setDescription("Duration in minutes")
+        .setDescription("XP multiplier to remove (e.g. 2 for 2x)")
         .setRequired(true)
     ),
 
@@ -24,10 +18,9 @@ module.exports = {
       return i.reply({ content: "No permission", ephemeral: true });
 
     const mult = i.options.getNumber("multiplier");
-    const mins = i.options.getInteger("minutes");
 
-    xp.addMultiplier(mult, mins * 60000);
+    xp.removeMultiplier(mult);
 
-    i.reply(`⭐ Added ${mult}x XP boost for ${mins} min`);
+    i.reply(`❌ Removed ${mult}x XP boost`);
   }
 };

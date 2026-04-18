@@ -6,12 +6,22 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("addmoneyboost")
     .setDescription("Add a money multiplier boost")
-    .addNumberOption(o => o.setName("multiplier").setRequired(true))
-    .addIntegerOption(o => o.setName("minutes").setRequired(true)),
+    .addNumberOption(o =>
+      o
+        .setName("multiplier")
+        .setDescription("Multiplier value (e.g. 2 for 2x)")
+        .setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o
+        .setName("minutes")
+        .setDescription("Duration in minutes")
+        .setRequired(true)
+    ),
 
   async execute(i) {
     if (!isAdmin(i.user.id))
-      return i.reply("No permission");
+      return i.reply({ content: "No permission", ephemeral: true });
 
     const mult = i.options.getNumber("multiplier");
     const mins = i.options.getInteger("minutes");
