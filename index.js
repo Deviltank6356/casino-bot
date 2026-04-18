@@ -3,7 +3,7 @@ const path = require("path");
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 
 const { check } = require("./systems/cooldowns");
-const { logCommand } = require("./services/admnLogger");
+const { logCommand } = require("./services/adminLogger");
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
