@@ -4,11 +4,15 @@ const { getUser } = require("../../db");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("balance")
-    .setDescription("Check balance"),
+    .setDescription("Check your balance"),
 
   async execute(i) {
-    const u = getUser(i.user.id);
+    const user = getUser(i.user.id);
 
-    i.reply(`💰 ${u.money}\n🏦 ${u.bank}\n⭐ XP ${u.xp}`);
+    return i.reply(
+      `💰 Money: ${user.money}\n` +
+      `🏦 Bank: ${user.bank}\n` +
+      `⭐ XP: ${user.xp}`
+    );
   }
 };

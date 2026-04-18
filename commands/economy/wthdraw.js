@@ -4,13 +4,23 @@ const { withdraw } = require("../../systems/bank");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("withdraw")
-    .addIntegerOption(o => o.setName("amount").setRequired(true))
-    .setDescription("Withdraw money"),
+    .setDescription("Withdraw money from your bank")
+    .addIntegerOption(o =>
+      o
+        .setName("amount")
+        .setDescription("Amount of money to withdraw")
+        .setRequired(true)
+    ),
 
   async execute(i) {
-    const r = withdraw(i.user.id, i.options.getInteger("amount"));
-    if (r.error) return i.reply(r.error);
+    const amount = i.options.getInteger("amount");
 
-    i.reply("💰 Withdrawn");
+    const result = withdraw(i.user.id, amount);
+
+    if (result?.error) {
+      return i.reply({ content: result.error, ephemeral: true });
+    }
+
+    return i.reply("💰 Withdrawn successfully");
   }
 };

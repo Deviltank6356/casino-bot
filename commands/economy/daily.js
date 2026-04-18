@@ -4,12 +4,15 @@ const { claim } = require("../../systems/rewards");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("daily")
-    .setDescription("Daily reward"),
+    .setDescription("Claim your daily reward"),
 
   async execute(i) {
-    const r = claim(i.user.id, "daily");
-    if (r.error) return i.reply(r.error);
+    const result = claim(i.user.id, "daily");
 
-    i.reply(`🎁 +${r.amount}`);
+    if (result?.error) {
+      return i.reply({ content: result.error, ephemeral: true });
+    }
+
+    return i.reply(`🎁 +${result.amount}`);
   }
 };
