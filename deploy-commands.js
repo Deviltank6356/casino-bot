@@ -5,7 +5,6 @@ const config = require("./config.json");
 
 const commands = [];
 
-
 // =============================
 // RECURSIVE COMMAND LOADER
 // =============================
@@ -18,10 +17,25 @@ function loadCommands(dir) {
     if (fs.lstatSync(fullPath).isDirectory()) {
       loadCommands(fullPath);
     } else {
+      console.log("Loading:", fullPath);
+
       const command = require(fullPath);
 
-      if (command?.data?.toJSON) {
+      if (!command?.data) {
+        console.log("❌ NO DATA:", fullPath);
+        continue;
+      }
+
+      if (!command.data.toJSON) {
+        console.log("❌ INVALID COMMAND STRUCTURE:", fullPath);
+        continue;
+      }
+
+      try {
         commands.push(command.data.toJSON());
+      } catch (err) {
+        console.log("💥 CRASHING FILE:", fullPath);
+        throw err;
       }
     }
   }
@@ -29,12 +43,10 @@ function loadCommands(dir) {
 
 loadCommands(path.join(__dirname, "commands"));
 
-
 // =============================
 // DISCORD REST CLIENT
 // =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
-
 
 // =============================
 // DEPLOY FUNCTION
@@ -43,7 +55,6 @@ const rest = new REST({ version: "10" }).setToken(config.token);
   try {
     console.log(`🚀 Deploying ${commands.length} slash commands...`);
 
-    // Guild commands (instant update, best for development)
     await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
       { body: commands }
