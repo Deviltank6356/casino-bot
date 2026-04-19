@@ -38,59 +38,70 @@ client.on("interactionCreate", async (i) => {
       }
 
       console.log("🚀 Executing:", i.commandName);
-
-      await cmd.execute(i, client);
+      return await cmd.execute(i, client);
     }
 
     // =============================
     // BUTTONS
     // =============================
-    if (i.isButton()) {
-      console.log("🔘 BUTTON:", i.customId);
+    if (!i.isButton()) return;
 
-      const game = bj.getGame(i.user.id);
+    console.log("🔘 BUTTON:", i.customId);
 
-      if (!game) {
-        return i.reply({
-          content: "❌ No active blackjack game",
-          ephemeral: true
-        });
-      }
+    const game = bj.getGame(i.user.id);
 
-      if (i.customId === "hit") {
-        const g = bj.hit(i.user.id);
-        if (!g) return;
+    if (!game) {
+      return i.reply({
+        content: "❌ No active blackjack game",
+        ephemeral: true
+      });
+    }
 
-        if (g.over) {
-          return i.update({
-            content: `💥 BUST!\n🧑 ${g.player} vs 🎩 ${g.dealer}\n🏁 YOU LOSE`,
-            components: []
-          });
-        }
+    // =============================
+    // HIT BUTTON
+    // =============================
+    if (i.customId === "hit") {
+      const g = bj.hit(i.user.id);
+      if (!g) return;
 
+      if (g.over) {
         return i.update({
-          content: `🧑 ${g.player} vs 🎩 ${g.dealer}`,
-          components: i.message.components
-        });
-      }
-
-      if (i.customId === "stand") {
-        const g = bj.stand(i.user.id);
-
-        let result = "LOSE";
-        if (g.result === "win") result = "WIN";
-        if (g.result === "push") result = "PUSH";
-
-        return i.update({
-          content:
-            `🏁 FINAL RESULT\n` +
-            `🧑 ${g.player}\n` +
-            `🎩 ${g.dealer}\n` +
-            `💰 RESULT: ${result}`,
+          content: `💥 BUST!\n🧑 ${g.player} vs 🎩 ${g.dealer}\n🏁 YOU LOSE`,
           components: []
         });
       }
+
+      return i.update({
+        content: `🧑 ${g.player} vs 🎩 ${g.dealer}`,
+        components: i.message.components
+      });
     }
+
+    // =============================
+    // STAND BUTTON
+    // =============================
+    if (i.customId === "stand") {
+      const g = bj.stand(i.user.id);
+      if (!g) return;
+
+      let resultText = "LOSE";
+      if (g.result === "win") resultText = "WIN";
+      if (g.result === "push") resultText = "PUSH";
+
+      return i.update({
+        content:
+          `🏁 FINAL RESULT\n` +
+          `🧑 ${g.player}\n` +
+          `🎩 ${g.dealer}\n` +
+          `💰 RESULT: ${resultText}`,
+        components: []
+      });
+    }
+
+    // =============================
+    // UNKNOWN BUTTON SAFETY
+    // =============================
+    return;
 
   } catch (err) {
     console.error("💥 INTERACTION ERROR:", err);
