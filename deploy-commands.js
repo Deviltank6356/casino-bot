@@ -7,11 +7,11 @@ const commands = [];
 const seen = new Set();
 
 // =============================
-// LOAD COMMANDS (HARD DEBUG VERSION)
+// LOAD COMMANDS (RECURSIVE + SAFE)
 // =============================
 function loadCommands(dir) {
   if (!fs.existsSync(dir)) {
-    console.error(`❌ MISSING DIRECTORY: ${dir}`);
+    console.error(`❌ Missing directory: ${dir}`);
     return;
   }
 
@@ -20,89 +20,58 @@ function loadCommands(dir) {
   for (const file of files) {
     const fullPath = path.join(dir, file);
 
-    console.log(`📂 Checking: ${fullPath}`);
-
     try {
       const stat = fs.lstatSync(fullPath);
 
-      // =============================
-      // RECURSIVE FOLDERS
-      // =============================
+      // folder → recurse
       if (stat.isDirectory()) {
-        console.log(`📁 Entering folder: ${fullPath}`);
         loadCommands(fullPath);
         continue;
       }
 
-      if (!file.endsWith(".js")) {
-        console.log(`⏭️ SKIP (not js): ${file}`);
-        continue;
-      }
+      if (!file.endsWith(".js")) continue;
 
-      // =============================
-      // LOAD FILE
-      // =============================
+      console.log(`📂 Found: ${fullPath}`);
+
       delete require.cache[require.resolve(fullPath)];
 
-      let command;
-      try {
-        command = require(fullPath);
-      } catch (err) {
-        console.error(`💥 REQUIRE FAILED: ${fullPath}`);
-        console.error(err.stack || err);
+      const command = require(fullPath);
+
+      if (!command?.data?.toJSON) {
+        console.warn(`⚠️ Skipped invalid command: ${fullPath}`);
         continue;
       }
 
-      console.log(`📦 LOADED FILE: ${fullPath}`);
-
-      if (!command?.data) {
-        console.warn(`⚠️ NO DATA EXPORT: ${fullPath}`);
-        continue;
-      }
-
-      if (typeof command.data.toJSON !== "function") {
-        console.warn(`⚠️ INVALID SlashCommandBuilder: ${fullPath}`);
-        continue;
-      }
-
-      let json;
-      try {
-        json = command.data.toJSON();
-      } catch (err) {
-        console.error(`❌ toJSON FAILED: ${fullPath}`);
-        console.error(err.stack || err);
-        continue;
-      }
+      const json = command.data.toJSON();
 
       if (!json?.name) {
-        console.warn(`⚠️ NO COMMAND NAME: ${fullPath}`);
+        console.warn(`⚠️ Missing name: ${fullPath}`);
         continue;
       }
 
       const name = json.name.toLowerCase().trim();
 
       if (seen.has(name)) {
-        console.error(`❌ DUPLICATE IGNORED: ${name}`);
+        console.error(`❌ Duplicate skipped: ${name}`);
         continue;
       }
 
       seen.add(name);
       commands.push(json);
 
-      console.log(`✅ LOADED COMMAND: ${name}`);
+      console.log(`✅ Loaded: ${name}`);
 
     } catch (err) {
-      console.error(`💥 FILE ERROR: ${fullPath}`);
+      console.error(`💥 Error loading: ${fullPath}`);
       console.error(err.stack || err);
     }
   }
 }
 
 // =============================
-// LOAD FOLDERS
+// IMPORTANT: ONLY ONE ROOT SCAN
 // =============================
 loadCommands(path.join(__dirname, "commands"));
-loadCommands(path.join(__dirname, "utils"));
 
 // =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
@@ -110,10 +79,10 @@ const rest = new REST({ version: "10" }).setToken(config.token);
 // =============================
 (async () => {
   try {
-    console.log(`🚀 FINAL COMMAND COUNT: ${commands.length}`);
+    console.log(`🚀 Deploying ${commands.length} commands...`);
 
     if (commands.length === 0) {
-      console.error("❌ NO COMMANDS LOADED — CHECK STRUCTURE");
+      console.error("❌ No commands found — check folder structure");
       return;
     }
 
@@ -122,10 +91,10 @@ const rest = new REST({ version: "10" }).setToken(config.token);
       { body: commands }
     );
 
-    console.log(`✅ DEPLOYED: ${result.length} commands`);
+    console.log(`✅ Successfully deployed ${result.length} commands`);
 
   } catch (err) {
-    console.error("❌ DEPLOY FAILED:");
-    console.error(err.stack || err);
+    console.error("❌ Deploy failed:");
+    console.error(err);
   }
 })();
