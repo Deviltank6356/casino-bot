@@ -3,21 +3,44 @@ const SpotifyWebApi = require("spotify-web-api-node");
 const fs = require("fs");
 const path = require("path");
 
-const CONFIG_PATH = path.join(__dirname, "../config.json");
-
 const app = express();
 
+const CONFIG_PATH = path.join(__dirname, "../config.json");
+
 // =============================
-// LOAD CONFIG SAFELY (NO CACHE)
+// SAFE CONFIG LOADER (CRASH PROOF)
 // =============================
 function loadConfig() {
-  return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+  } catch (err) {
+    console.error("❌ Config read error:", err.message);
+    return {
+      spotify: {
+        clientId: "",
+        clientSecret: "",
+        redirectUri: "",
+        baseUrl: ""
+      }
+    };
+  }
 }
 
 // =============================
-// SPOTIFY CLIENT (STATIC KEYS ONLY)
+// SAFE CONFIG WRITER (NO FIELD LOSS)
 // =============================
-function createSpotifyClient(config) {
+function saveConfig(updateFn) {
+  const cfg = loadConfig();
+
+  const updated = updateFn(cfg);
+
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2));
+}
+
+// =============================
+// CREATE SPOTIFY CLIENT
+// =============================
+function createSpotify(config) {
   return new SpotifyWebApi({
     clientId: config.spotify.clientId,
     clientSecret: config.spotify.clientSecret,
@@ -30,7 +53,7 @@ function createSpotifyClient(config) {
 // =============================
 app.get("/login", (req, res) => {
   const config = loadConfig();
-  const spotify = createSpotifyClient(config);
+  const spotify = createSpotify(config);
 
   const userId = req.query.user;
 
@@ -50,12 +73,12 @@ app.get("/login", (req, res) => {
 });
 
 // =============================
-// CALLBACK ROUTE (SAFE + NO DATA LOSS)
+// CALLBACK ROUTE
 // =============================
 app.get("/callback", async (req, res) => {
   try {
     const config = loadConfig();
-    const spotify = createSpotifyClient(config);
+    const spotify = createSpotify(config);
 
     const { code, state } = req.query;
 
@@ -74,26 +97,20 @@ app.get("/callback", async (req, res) => {
 
     spotify.setAccessToken(accessToken);
 
-    // optional verification (safe)
+    // optional sanity check
     await spotify.getMe().catch(() => null);
 
     // =============================
-    // 🔥 SAFE CONFIG UPDATE (NO KEY LOSS)
+    // SAFE UPDATE (ONLY spotify.refreshToken)
+    // DOES NOT TOUCH baseUrl OR ANY OTHER FIELD
     // =============================
-    const freshConfig = loadConfig();
-
-    const updatedConfig = {
-      ...freshConfig,
+    saveConfig(cfg => ({
+      ...cfg,
       spotify: {
-        ...freshConfig.spotify,
-        refreshToken // ONLY CHANGE THIS
+        ...cfg.spotify,
+        refreshToken
       }
-    };
-
-    fs.writeFileSync(
-      CONFIG_PATH,
-      JSON.stringify(updatedConfig, null, 2)
-    );
+    }));
 
     console.log(`✅ Spotify linked for user: ${state}`);
 
@@ -111,7 +128,7 @@ app.get("/callback", async (req, res) => {
 });
 
 // =============================
-// HEALTH CHECK (FOR CLOUD TUNNELS)
+// HEALTH CHECK
 // =============================
 app.get("/", (req, res) => {
   res.send("Spotify auth server running ✔");
@@ -121,7 +138,7 @@ app.get("/", (req, res) => {
 // START SERVER
 // =============================
 app.listen(3000, "0.0.0.0", () => {
-  console.log("🚀 Spotify auth server running");
+  console.log("🚀 Spotify auth running");
 
   const config = loadConfig();
 

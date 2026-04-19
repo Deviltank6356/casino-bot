@@ -2,15 +2,23 @@ const express = require("express");
 const SpotifyWebApi = require("spotify-web-api-node");
 const fs = require("fs");
 const path = require("path");
-const config = require("../config.json");
 
 const app = express();
 
 const CONFIG_PATH = path.join(__dirname, "../config.json");
 
 // =============================
-// SPOTIFY INSTANCE (base only)
+// LOAD CONFIG SAFELY (FRESH READ EACH TIME)
 // =============================
+function loadConfig() {
+  return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+}
+
+// =============================
+// SPOTIFY CLIENT (static setup only)
+// =============================
+const config = loadConfig();
+
 const spotify = new SpotifyWebApi({
   clientId: config.spotify.clientId,
   clientSecret: config.spotify.clientSecret,
@@ -18,22 +26,21 @@ const spotify = new SpotifyWebApi({
 });
 
 // =============================
-// HELPERS
+// SAFE CONFIG UPDATE (ONLY PARTIAL WRITE)
 // =============================
-function saveRefreshToken(token) {
-  const updated = {
-    ...config,
-    spotify: {
-      ...config.spotify,
-      refreshToken: token
-    }
+function saveSpotifyData({ refreshToken }) {
+  const cfg = loadConfig(); // ALWAYS fresh file
+
+  cfg.spotify = {
+    ...cfg.spotify,
+    refreshToken
   };
 
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2));
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
 }
 
 // =============================
-// LOGIN
+// LOGIN ROUTE
 // =============================
 app.get("/login", (req, res) => {
   const scopes = [
@@ -42,62 +49,60 @@ app.get("/login", (req, res) => {
     "user-read-recently-played"
   ];
 
-  const state = Math.random().toString(36).slice(2);
+  const state = req.query.user || "unknown";
 
   const url = spotify.createAuthorizeURL(scopes, state);
   res.redirect(url);
 });
 
 // =============================
-// CALLBACK
+// CALLBACK ROUTE
 // =============================
 app.get("/callback", async (req, res) => {
   try {
-    const { code, error, state } = req.query;
+    const { code, error } = req.query;
 
-    if (error) {
-      return res.status(400).send("❌ OAuth denied");
-    }
-
-    if (!code) {
-      return res.status(400).send("❌ No code received");
-    }
+    if (error) return res.status(400).send("❌ OAuth denied");
+    if (!code) return res.status(400).send("❌ Missing code");
 
     const data = await spotify.authorizationCodeGrant(code);
 
     const accessToken = data.body.access_token;
     const refreshToken = data.body.refresh_token;
 
-    console.log("✅ Spotify tokens received");
-
-    // Set tokens for immediate use
     spotify.setAccessToken(accessToken);
     spotify.setRefreshToken(refreshToken);
 
-    // Persist refresh token ONLY
-    saveRefreshToken(refreshToken);
+    // 🔥 SAFE SAVE (does NOT delete baseUrl or anything else)
+    saveSpotifyData({ refreshToken });
 
-    res.send("✅ Spotify connected successfully. You can close this tab.");
+    console.log("✅ Spotify linked successfully");
+
+    res.send("Spotify connected ✔ You can close this tab.");
 
   } catch (err) {
-    console.error("Spotify auth failed:", err?.body || err.message || err);
-    res.status(500).send("❌ Auth failed");
+    console.error("❌ Spotify auth error:", err?.body || err.message || err);
+    res.status(500).send("Auth failed");
   }
 });
 
 // =============================
-// REFRESH TOKEN HELPER (IMPORTANT FIX)
+// REFRESH TOKEN (SAFE)
 // =============================
 async function refreshAccessToken() {
   try {
-    spotify.setRefreshToken(config.spotify.refreshToken);
+    const cfg = loadConfig();
+
+    spotify.setRefreshToken(cfg.spotify.refreshToken);
 
     const data = await spotify.refreshAccessToken();
 
-    spotify.setAccessToken(data.body.access_token);
+    const accessToken = data.body.access_token;
+    spotify.setAccessToken(accessToken);
 
-    console.log("🔄 Spotify access token refreshed");
-    return data.body.access_token;
+    console.log("🔄 Access token refreshed");
+
+    return accessToken;
 
   } catch (err) {
     console.error("❌ Refresh failed:", err.message);
@@ -106,9 +111,15 @@ async function refreshAccessToken() {
 }
 
 // =============================
+// START SERVER
+// =============================
 app.listen(3000, "0.0.0.0", () => {
   console.log("🚀 Spotify Auth running on port 3000");
   console.log("➡ Login: http://localhost:3000/login");
 });
 
-module.exports = { spotify, refreshAccessToken };
+// =============================
+module.exports = {
+  spotify,
+  refreshAccessToken
+};
