@@ -22,29 +22,43 @@ function createDefaultUser() {
     },
 
     started: 0,
+
+    // 🔥 SPOTIFY SUPPORT (IMPORTANT)
+    spotifyLinked: 0,
+    spotifyRefreshToken: null,
+    lastChannelId: null,
+
     joinedAt: Date.now()
   };
 }
 
 // =============================
-// TABLE (SAFE + FIXED)
+// TABLE (FULL SAFE SCHEMA)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
+
   money INTEGER DEFAULT 0,
   xp INTEGER DEFAULT 0,
   level INTEGER DEFAULT 0,
   bank INTEGER DEFAULT 0,
+
   claims TEXT DEFAULT '{}',
   streaks TEXT DEFAULT '{}',
+
   started INTEGER DEFAULT 0,
+
+  spotifyLinked INTEGER DEFAULT 0,
+  spotifyRefreshToken TEXT DEFAULT NULL,
+  lastChannelId TEXT DEFAULT NULL,
+
   joinedAt INTEGER DEFAULT (strftime('%s','now') * 1000)
 );
 `).run();
 
 // =============================
-// SAFE JSON
+// SAFE PARSE
 // =============================
 function safeParse(v, fallback = {}) {
   try {
@@ -56,7 +70,7 @@ function safeParse(v, fallback = {}) {
 }
 
 // =============================
-// NORMALIZE (HARDENED)
+// NORMALIZE (ROBUST)
 // =============================
 function normalize(raw) {
   const streaks = safeParse(raw.streaks);
@@ -77,8 +91,12 @@ function normalize(raw) {
       monthly: { count: 0, last: 0, ...(streaks.monthly || {}) }
     },
 
-    // 🔒 HARD LOCK (ONLY 0 or 1)
     started: Number(raw.started) === 1 ? 1 : 0,
+
+    // 🔥 SPOTIFY FIELDS
+    spotifyLinked: Number(raw.spotifyLinked) === 1 ? 1 : 0,
+    spotifyRefreshToken: raw.spotifyRefreshToken || null,
+    lastChannelId: raw.lastChannelId || null,
 
     joinedAt: Number(raw.joinedAt) || Date.now()
   };
@@ -96,8 +114,11 @@ function getUser(id) {
     db.prepare(`
       INSERT INTO users (
         id, money, xp, level, bank,
-        claims, streaks, started, joinedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        claims, streaks,
+        started,
+        spotifyLinked, spotifyRefreshToken, lastChannelId,
+        joinedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       u.money,
@@ -106,7 +127,10 @@ function getUser(id) {
       u.bank,
       JSON.stringify(u.claims),
       JSON.stringify(u.streaks),
-      0, // 🔒 force not started on creation
+      u.started,
+      u.spotifyLinked,
+      u.spotifyRefreshToken,
+      u.lastChannelId,
       u.joinedAt
     );
 
@@ -130,7 +154,10 @@ function saveUser(user) {
       bank = ?,
       claims = ?,
       streaks = ?,
-      started = ?
+      started = ?,
+      spotifyLinked = ?,
+      spotifyRefreshToken = ?,
+      lastChannelId = ?
     WHERE id = ?
   `).run(
     u.money,
@@ -140,6 +167,9 @@ function saveUser(user) {
     JSON.stringify(u.claims),
     JSON.stringify(u.streaks),
     u.started,
+    u.spotifyLinked,
+    u.spotifyRefreshToken,
+    u.lastChannelId,
     u.id
   );
 }

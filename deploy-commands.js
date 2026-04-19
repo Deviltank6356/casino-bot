@@ -7,7 +7,7 @@ const commands = [];
 const seen = new Set();
 
 // =============================
-// SAFE LOAD
+// LOAD COMMANDS
 // =============================
 function loadCommands(dir) {
   const files = fs.readdirSync(dir);
@@ -25,12 +25,21 @@ function loadCommands(dir) {
 
       if (!file.endsWith(".js")) continue;
 
+      // clear cache (important for PM2)
       delete require.cache[require.resolve(fullPath)];
 
       const command = require(fullPath);
 
-      if (!command?.data?.toJSON) {
-        console.warn(`⚠️ Invalid command skipped: ${fullPath}`);
+      // =============================
+      // VALIDATION 1: structure
+      // =============================
+      if (!command || !command.data) {
+        console.warn(`⚠️ SKIP (no command.data): ${fullPath}`);
+        continue;
+      }
+
+      if (typeof command.data.toJSON !== "function") {
+        console.warn(`⚠️ SKIP (no toJSON): ${fullPath}`);
         continue;
       }
 
@@ -38,31 +47,40 @@ function loadCommands(dir) {
       try {
         json = command.data.toJSON();
       } catch (e) {
-        console.error(`❌ toJSON failed: ${fullPath}`, e);
+        console.error(`❌ toJSON ERROR: ${fullPath}`, e);
         continue;
       }
 
       if (!json?.name) {
-        console.warn(`⚠️ Missing name: ${fullPath}`);
+        console.warn(`⚠️ SKIP (missing name): ${fullPath}`);
         continue;
       }
 
-      // normalize name
+      // =============================
+      // VALIDATION 2: normalize name
+      // =============================
       const name = json.name.toLowerCase().trim();
 
-      // strict duplicate protection
+      if (!/^[a-z0-9-]+$/.test(name)) {
+        console.error(`❌ INVALID COMMAND NAME (must be lowercase, no spaces): ${name} (${fullPath})`);
+        continue;
+      }
+
+      // =============================
+      // VALIDATION 3: duplicates
+      // =============================
       if (seen.has(name)) {
-        console.error(`❌ Duplicate command ignored: ${name}`);
+        console.error(`❌ DUPLICATE IGNORED: ${name} (${fullPath})`);
         continue;
       }
 
       seen.add(name);
       commands.push(json);
 
-      console.log(`✅ Loaded: ${name}`);
+      console.log(`✅ LOADED: ${name} (${file})`);
 
     } catch (err) {
-      console.error(`💥 Failed loading: ${fullPath}`, err);
+      console.error(`💥 FAILED FILE: ${fullPath}`, err);
     }
   }
 }
@@ -71,18 +89,23 @@ function loadCommands(dir) {
 loadCommands(path.join(__dirname, "commands"));
 
 // =============================
-// FINAL CLEANUP (EXTRA SAFETY)
+// FINAL SAFETY DEDUPLICATION
 // =============================
-const uniqueCommands = [];
-const finalSeen = new Set();
+const unique = [];
+const final = new Set();
 
 for (const cmd of commands) {
-  const name = cmd.name.toLowerCase();
+  if (!cmd?.name) continue;
 
-  if (finalSeen.has(name)) continue;
+  const name = cmd.name.toLowerCase().trim();
 
-  finalSeen.add(name);
-  uniqueCommands.push(cmd);
+  if (final.has(name)) {
+    console.error(`❌ FINAL DROP DUPLICATE: ${name}`);
+    continue;
+  }
+
+  final.add(name);
+  unique.push(cmd);
 }
 
 // =============================
@@ -91,16 +114,16 @@ const rest = new REST({ version: "10" }).setToken(config.token);
 // =============================
 (async () => {
   try {
-    console.log(`🚀 Deploying ${uniqueCommands.length} commands...`);
+    console.log(`🚀 Deploying ${unique.length} commands...`);
 
     const result = await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
-      { body: uniqueCommands }
+      { body: unique }
     );
 
-    console.log(`✅ Successfully deployed ${result.length} commands`);
+    console.log(`✅ DEPLOYED: ${result.length} commands`);
 
   } catch (err) {
-    console.error("❌ Deploy failed:", err);
+    console.error("❌ DEPLOY FAILED:", err);
   }
 })();

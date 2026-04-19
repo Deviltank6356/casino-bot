@@ -2,20 +2,21 @@ const express = require("express");
 const SpotifyWebApi = require("spotify-web-api-node");
 const path = require("path");
 const Database = require("better-sqlite3");
-
 const config = require("./config.json");
 
 const app = express();
 const db = new Database(path.join(__dirname, "casino.db"));
 
 // =============================
-// TABLE
+// TABLE (SAFE + INDEXED)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS spotify_tokens (
   userId TEXT PRIMARY KEY,
-  refreshToken TEXT NOT NULL
-)
+  refreshToken TEXT NOT NULL,
+  accessToken TEXT,
+  expiresAt INTEGER
+);
 `).run();
 
 // =============================
@@ -53,7 +54,7 @@ app.get("/login", (req, res) => {
 });
 
 // =============================
-// CALLBACK ROUTE (FIXED + VERIFIED)
+// CALLBACK ROUTE (HARDENED)
 // =============================
 app.get("/callback", async (req, res) => {
   try {
@@ -68,27 +69,37 @@ app.get("/callback", async (req, res) => {
 
     const refreshToken = data?.body?.refresh_token;
     const accessToken = data?.body?.access_token;
+    const expiresIn = data?.body?.expires_in;
 
     if (!refreshToken || !accessToken) {
       return res.status(500).send("Invalid Spotify response");
     }
 
-    // verify token works (IMPORTANT)
+    // set token for verification
     spotify.setAccessToken(accessToken);
 
-    const test = await spotify.getMe().catch(() => null);
+    // VERIFY TOKEN WORKS (prevents 403 issues later)
+    const me = await spotify.getMe().catch(() => null);
 
-    if (!test) {
+    if (!me) {
       return res.status(500).send("Spotify verification failed");
     }
 
-    // store per user
-    db.prepare(`
-      INSERT OR REPLACE INTO spotify_tokens (userId, refreshToken)
-      VALUES (?, ?)
-    `).run(state, refreshToken);
+    const expiresAt = Date.now() + (expiresIn * 1000);
 
-    console.log(`✅ Linked Spotify for user: ${state}`);
+    // store per user safely
+    db.prepare(`
+      INSERT OR REPLACE INTO spotify_tokens
+      (userId, refreshToken, accessToken, expiresAt)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      state,
+      refreshToken,
+      accessToken,
+      expiresAt
+    );
+
+    console.log(`✅ Spotify linked: ${state}`);
 
     res.send("Spotify linked successfully ✔ You can close this tab.");
 
@@ -102,6 +113,13 @@ app.get("/callback", async (req, res) => {
 
     res.status(500).send("Auth failed");
   }
+});
+
+// =============================
+// HEALTH CHECK (IMPORTANT FOR TUNNELS)
+// =============================
+app.get("/", (req, res) => {
+  res.send("Spotify auth server running ✔");
 });
 
 // =============================
