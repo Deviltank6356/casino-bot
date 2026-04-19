@@ -22,7 +22,9 @@ app.get("/login", (req, res) => {
     "user-read-recently-played"
   ];
 
-  const url = spotify.createAuthorizeURL(scopes, "state123");
+  const state = Math.random().toString(36).substring(2, 15);
+
+  const url = spotify.createAuthorizeURL(scopes, state);
   res.redirect(url);
 });
 
@@ -31,35 +33,53 @@ app.get("/login", (req, res) => {
 // =============================
 app.get("/callback", async (req, res) => {
   try {
-    const code = req.query.code;
-    if (!code) return res.send("No code received");
+    const { code, error } = req.query;
+
+    if (error) {
+      console.error("Spotify OAuth error:", error);
+      return res.status(400).send("OAuth denied");
+    }
+
+    if (!code) {
+      return res.status(400).send("No code received");
+    }
 
     const data = await spotify.authorizationCodeGrant(code);
 
     const accessToken = data.body.access_token;
     const refreshToken = data.body.refresh_token;
 
-    console.log("ACCESS TOKEN:", accessToken);
-    console.log("REFRESH TOKEN:", refreshToken);
+    console.log("✅ ACCESS TOKEN RECEIVED");
+    console.log("🔁 REFRESH TOKEN RECEIVED");
 
-    // SAVE PERMANENTLY
-    config.spotify.refreshToken = refreshToken;
+    // IMPORTANT: set tokens immediately
+    spotify.setAccessToken(accessToken);
+    spotify.setRefreshToken(refreshToken);
+
+    // update config safely
+    const updatedConfig = {
+      ...config,
+      spotify: {
+        ...config.spotify,
+        refreshToken
+      }
+    };
 
     fs.writeFileSync(
       path.join(__dirname, "../config.json"),
-      JSON.stringify(config, null, 2)
+      JSON.stringify(updatedConfig, null, 2)
     );
 
-    res.send("✅ Spotify connected! You can close this tab.");
+    res.send("✅ Spotify connected successfully. You can close this tab.");
 
   } catch (err) {
-    console.error(err);
+    console.error("Spotify auth failed:", err?.body || err.message || err);
     res.status(500).send("Auth failed");
   }
 });
 
 // =============================
 app.listen(3000, "0.0.0.0", () => {
-  console.log("Spotify Auth running on port 3000");
-  console.log("Login URL: http://79.72.92.17:3000/login");
+  console.log("🚀 Spotify Auth running on port 3000");
+  console.log("Login URL: http://localhost:3000/login");
 });
