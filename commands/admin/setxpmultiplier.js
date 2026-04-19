@@ -5,26 +5,52 @@ const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("addxpboost")
-    .setDescription("Add XP multiplier boost")
+    .setName("setxpmultiplier")
+    .setDescription("Set the global XP multiplier")
     .addNumberOption(o =>
-      o.setName("multiplier").setRequired(true)
-    )
-    .addIntegerOption(o =>
-      o.setName("minutes").setRequired(true)
+      o
+        .setName("multiplier")
+        .setDescription("Multiplier value (e.g. 2 = 2x)")
+        .setRequired(true)
     ),
 
   async execute(i, client) {
-    if (!isAdmin(i.user.id))
-      return i.reply({ content: "No permission", ephemeral: true });
+    try {
+      if (!isAdmin(i.user.id)) {
+        return i.reply({ content: "❌ No permission", ephemeral: true });
+      }
 
-    const mult = i.options.getNumber("multiplier");
-    const mins = i.options.getInteger("minutes");
+      const mult = i.options.getNumber("multiplier");
 
-    xp.addMultiplier(mult, mins * 60000);
+      if (!mult || mult <= 0) {
+        return i.reply({
+          content: "❌ Invalid multiplier",
+          ephemeral: true
+        });
+      }
 
-    await logAdminAction(client, i, "ADD XP BOOST", `${mult}x for ${mins}m`);
+      xp.setMultiplier(mult);
 
-    i.reply(`⭐ Added ${mult}x XP boost for ${mins} min`);
+      try {
+        await logAdminAction(
+          client,
+          i,
+          "SET XP MULTIPLIER",
+          `${mult}x`
+        );
+      } catch (err) {
+        console.error("LOG ERROR:", err);
+      }
+
+      return i.reply(`⭐ XP multiplier set to ${mult}x`);
+
+    } catch (err) {
+      console.error("SETXPMULTIPLIER ERROR:", err);
+
+      return i.reply({
+        content: "❌ Error setting XP multiplier",
+        ephemeral: true
+      });
+    }
   }
 };
