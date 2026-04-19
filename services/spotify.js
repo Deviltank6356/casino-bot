@@ -78,16 +78,15 @@ async function getNowPlaying() {
       isPlaying: Boolean(res.body.is_playing)
     };
 
-  } catch (err) {
-    console.error("❌ Spotify API error FULL:", {
-      message: err?.message,
-      body: err?.body,
-      status: err?.statusCode,
-      stack: err?.stack
-    });
-
-    return { status: "error" };
-  }
+  function logSpotifyError(err) {
+  console.error("❌ SPOTIFY FULL DEBUG:");
+  console.error(JSON.stringify({
+    message: err?.message,
+    body: err?.body,
+    statusCode: err?.statusCode,
+    stack: err?.stack,
+    raw: err
+  }, null, 2));
 }
 
 module.exports = { getNowPlaying };
