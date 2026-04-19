@@ -13,6 +13,7 @@ module.exports = {
     let total = 0;
     let passed = 0;
     let failed = 0;
+
     const errors = [];
     const seen = new Set();
 
@@ -30,12 +31,17 @@ module.exports = {
         total++;
 
         try {
+          // clear cache so edits are tested properly
           delete require.cache[require.resolve(full)];
+
           const cmd = require(full);
 
+          // =========================
+          // VALIDATION
+          // =========================
           if (!cmd || !cmd.data) {
             failed++;
-            errors.push(`❌ ${file} → missing command data`);
+            errors.push(`❌ ${file} → missing data`);
             continue;
           }
 
@@ -47,15 +53,18 @@ module.exports = {
 
           const json = cmd.data.toJSON();
 
-          if (!json?.name) {
+          if (!json?.name || typeof json.name !== "string") {
             failed++;
-            errors.push(`❌ ${file} → missing name`);
+            errors.push(`❌ ${file} → invalid or missing name`);
             continue;
           }
 
+          // =========================
+          // DUPLICATE CHECK
+          // =========================
           if (seen.has(json.name)) {
             failed++;
-            errors.push(`⚠️ duplicate → ${json.name}`);
+            errors.push(`⚠️ duplicate command → ${json.name}`);
             continue;
           }
 
@@ -69,21 +78,38 @@ module.exports = {
       }
     }
 
-    scan(baseDir);
+    try {
+      scan(baseDir);
+    } catch (err) {
+      return interaction.reply({
+        content: `❌ Fatal scan error: ${err.message}`,
+        ephemeral: true
+      });
+    }
 
-    const embedText =
+    // =========================
+    // OUTPUT
+    // =========================
+    let output =
       `🧪 **COMMAND TEST RESULTS**\n` +
       `━━━━━━━━━━━━━━\n` +
       `📦 Total: ${total}\n` +
       `✅ Passed: ${passed}\n` +
       `❌ Failed: ${failed}\n` +
-      `━━━━━━━━━━━━━━\n` +
-      (errors.length
-        ? errors.slice(0, 15).join("\n")
-        : "🎉 All commands valid!");
+      `━━━━━━━━━━━━━━\n`;
+
+    if (errors.length > 0) {
+      output += errors.slice(0, 15).join("\n");
+
+      if (errors.length > 15) {
+        output += `\n...and ${errors.length - 15} more errors`;
+      }
+    } else {
+      output += "🎉 All commands valid!";
+    }
 
     return interaction.reply({
-      content: embedText,
+      content: output,
       ephemeral: true
     });
   }
