@@ -1,8 +1,11 @@
 const SpotifyWebApi = require("spotify-web-api-node");
 
-// in-memory cache (replace with DB later)
+// in-memory cache (TEMP ONLY — restarts will wipe it)
 const userTokens = new Map();
 
+/**
+ * Store user tokens after OAuth login
+ */
 function setUserTokens(userId, refreshToken) {
   const api = new SpotifyWebApi({
     clientId: process.env.SPOTIFY_ID,
@@ -16,23 +19,25 @@ function setUserTokens(userId, refreshToken) {
     api,
     lastRefresh: 0
   });
+
+  console.log(`✅ Spotify linked in memory: ${userId}`);
 }
 
-// =============================
-// REFRESH TOKEN SAFELY
-// =============================
+/**
+ * Refresh access token safely
+ */
 async function refreshUser(userId, data) {
   try {
     const now = Date.now();
 
-    // avoid spam refresh
-    if (now - data.lastRefresh < 300000 && data.accessToken) {
+    // prevent spam refresh
+    if (data.accessToken && now - data.lastRefresh < 300000) {
       return true;
     }
 
     const res = await data.api.refreshAccessToken();
-
     const token = res?.body?.access_token;
+
     if (!token) return false;
 
     data.api.setAccessToken(token);
@@ -40,17 +45,22 @@ async function refreshUser(userId, data) {
     data.lastRefresh = now;
 
     return true;
-  } catch {
+  } catch (err) {
+    console.error("Spotify refresh failed:", err?.body || err.message || err);
     return false;
   }
 }
 
-// =============================
-// GET CURRENT TRACK (REAL-TIME SAFE)
-// =============================
+/**
+ * Get current playback
+ */
 async function getUserSpotify(userId) {
   const data = userTokens.get(userId);
-  if (!data) return null;
+
+  // 🔴 THIS is what your bot is hitting
+  if (!data) {
+    return { status: "not_linked" };
+  }
 
   try {
     await refreshUser(userId, data);
@@ -68,7 +78,7 @@ async function getUserSpotify(userId) {
       name: item.name,
       artist: item.artists?.map(a => a.name).join(", ") || "Unknown",
       url: item.external_urls?.spotify || null,
-      isPlaying: Boolean(res.body.is_playing)
+      isPlaying: res.body.is_playing
     };
 
   } catch (err) {
