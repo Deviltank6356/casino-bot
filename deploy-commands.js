@@ -4,9 +4,10 @@ const { REST, Routes } = require("discord.js");
 const config = require("./config.json");
 
 const commands = [];
+const nameCount = new Map();
 
 // =============================
-// RECURSIVE COMMAND LOADER
+// LOAD COMMANDS
 // =============================
 function loadCommands(dir) {
   const files = fs.readdirSync(dir);
@@ -20,27 +21,36 @@ function loadCommands(dir) {
         continue;
       }
 
-      // console.log("📄 Loading:", fullPath); // DEBUG (disabled)
-
       const command = require(fullPath);
 
-      if (!command?.data) {
-        // console.log("❌ NO DATA:", fullPath); // DEBUG (disabled)
-        continue;
+      if (!command?.data?.toJSON) continue;
+
+      const json = command.data.toJSON();
+      if (!json?.name) continue;
+
+      // =============================
+      // AUTO FIX DUPLICATES
+      // =============================
+      let name = json.name;
+
+      if (nameCount.has(name)) {
+        const count = nameCount.get(name) + 1;
+        nameCount.set(name, count);
+
+        const newName = `${name}_${count}`;
+        console.warn(`⚠️ Duplicate detected: ${name} → renamed to ${newName}`);
+
+        json.name = newName;
+      } else {
+        nameCount.set(name, 1);
       }
 
-      if (typeof command.data.toJSON !== "function") {
-        // console.log("❌ INVALID COMMAND STRUCTURE:", fullPath); // DEBUG (disabled)
-        continue;
-      }
+      commands.push(json);
 
-      commands.push(command.data.toJSON());
-
-      // console.log("✅ Loaded command"); // DEBUG (disabled)
+      console.log(`✅ Loaded: ${json.name}`);
 
     } catch (err) {
-      console.error("💥 Failed loading command:", fullPath);
-      console.error(err);
+      console.error(`💥 Failed loading: ${fullPath}`, err);
     }
   }
 }
@@ -48,16 +58,11 @@ function loadCommands(dir) {
 loadCommands(path.join(__dirname, "commands"));
 
 // =============================
-// DISCORD REST CLIENT
-// =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
 
-// =============================
-// DEPLOY COMMANDS
-// =============================
 (async () => {
   try {
-    console.log(`🚀 Deploying ${commands.length} slash commands...`);
+    console.log(`🚀 Deploying ${commands.length} commands...`);
 
     const result = await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
@@ -65,7 +70,7 @@ const rest = new REST({ version: "10" }).setToken(config.token);
     );
 
     console.log(`✅ Deployed ${result.length} commands`);
-  } catch (error) {
-    console.error("❌ Deploy failed:", error);
+  } catch (err) {
+    console.error("❌ Deploy failed:", err);
   }
 })();

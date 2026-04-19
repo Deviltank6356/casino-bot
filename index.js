@@ -1,18 +1,16 @@
+const bj = require("./games/blackjackManager");
+
 client.on("interactionCreate", async (i) => {
+  try {
+    console.log("🔥 INTERACTION:", i.commandName || i.customId);
 
-  console.log("🔥 INTERACTION:", i.commandName || i.customId);
-
-  // =============================
-  // SLASH COMMANDS
-  // =============================
-  if (i.isChatInputCommand()) {
-
-    try {
+    // =============================
+    // SLASH COMMANDS
+    // =============================
+    if (i.isChatInputCommand()) {
       console.log("➡️ COMMAND:", i.commandName);
 
-      // =============================
-      // SAFE LOGGING (DOES NOT CRASH BOT)
-      // =============================
+      // SAFE LOGGING
       try {
         if (typeof logCommand === "function") {
           logCommand(i);
@@ -22,59 +20,42 @@ client.on("interactionCreate", async (i) => {
       }
 
       const cd = check(i.user.id, i.commandName);
-      console.log("⏳ Cooldown:", cd);
 
       if (cd) {
         return i.reply({
           content: `⏳ Wait ${Math.ceil(cd / 1000)}s`,
-          flags: 64
+          ephemeral: true
         });
       }
 
       const cmd = client.commands.get(i.commandName);
 
       if (!cmd) {
-        console.log("❌ Command not found:", i.commandName);
         return i.reply({
           content: "❌ Command not found",
-          flags: 64
+          ephemeral: true
         });
       }
 
       console.log("🚀 Executing:", i.commandName);
 
       await cmd.execute(i, client);
+    }
 
-    } catch (err) {
-      console.error("💥 COMMAND ERROR:", err);
+    // =============================
+    // BUTTONS
+    // =============================
+    if (i.isButton()) {
+      console.log("🔘 BUTTON:", i.customId);
 
-      if (!i.replied) {
+      const game = bj.getGame(i.user.id);
+
+      if (!game) {
         return i.reply({
-          content: "❌ Command crashed",
-          flags: 64
+          content: "❌ No active blackjack game",
+          ephemeral: true
         });
       }
-    }
-  }
-
-  // =============================
-  // BUTTONS
-  // =============================
-  if (i.isButton()) {
-
-    console.log("🔘 BUTTON:", i.customId);
-
-    const bj = require("./games/blackjackManager");
-
-    const game = bj.getGame(i.user.id);
-    if (!game) {
-      return i.reply({
-        content: "❌ No active blackjack game",
-        flags: 64
-      });
-    }
-
-    try {
 
       if (i.customId === "hit") {
         const g = bj.hit(i.user.id);
@@ -109,13 +90,15 @@ client.on("interactionCreate", async (i) => {
           components: []
         });
       }
+    }
 
-    } catch (err) {
-      console.error("💥 BUTTON ERROR:", err);
+  } catch (err) {
+    console.error("💥 INTERACTION ERROR:", err);
 
+    if (!i.replied && !i.deferred) {
       return i.reply({
-        content: "❌ Button error",
-        flags: 64
+        content: "❌ Something went wrong",
+        ephemeral: true
       });
     }
   }
