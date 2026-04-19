@@ -4,7 +4,7 @@ const { REST, Routes } = require("discord.js");
 const config = require("./config.json");
 
 const commands = [];
-const nameCount = new Map();
+const seen = new Set();
 
 // =============================
 // LOAD COMMANDS
@@ -21,30 +21,30 @@ function loadCommands(dir) {
         continue;
       }
 
+      delete require.cache[require.resolve(fullPath)];
       const command = require(fullPath);
 
-      if (!command?.data?.toJSON) continue;
-
-      const json = command.data.toJSON();
-      if (!json?.name) continue;
-
-      // =============================
-      // AUTO FIX DUPLICATES
-      // =============================
-      let name = json.name;
-
-      if (nameCount.has(name)) {
-        const count = nameCount.get(name) + 1;
-        nameCount.set(name, count);
-
-        const newName = `${name}_${count}`;
-        console.warn(`⚠️ Duplicate detected: ${name} → renamed to ${newName}`);
-
-        json.name = newName;
-      } else {
-        nameCount.set(name, 1);
+      if (!command?.data?.toJSON) {
+        console.warn(`⚠️ Invalid command skipped: ${fullPath}`);
+        continue;
       }
 
+      const json = command.data.toJSON();
+
+      if (!json?.name) {
+        console.warn(`⚠️ Missing name: ${fullPath}`);
+        continue;
+      }
+
+      // =============================
+      // DUPLICATE CHECK (NO RENAMING)
+      // =============================
+      if (seen.has(json.name)) {
+        console.error(`❌ Duplicate command ignored: ${json.name}`);
+        continue; // IMPORTANT: skip instead of renaming
+      }
+
+      seen.add(json.name);
       commands.push(json);
 
       console.log(`✅ Loaded: ${json.name}`);
@@ -60,6 +60,7 @@ loadCommands(path.join(__dirname, "commands"));
 // =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
 
+// =============================
 (async () => {
   try {
     console.log(`🚀 Deploying ${commands.length} commands...`);

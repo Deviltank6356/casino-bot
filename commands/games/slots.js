@@ -43,9 +43,10 @@ module.exports = {
   async execute(interaction) {
 
     // =============================
-    // /START CHECK (IMPORTANT)
+    // /START CHECK (SAFE)
     // =============================
-    if (!requireStart(interaction)) {
+    const startCheck = requireStart(interaction);
+    if (!startCheck) {
       return interaction.reply({
         content: "❌ You must run /start first",
         ephemeral: true
@@ -63,14 +64,14 @@ module.exports = {
         });
       }
 
-      if (!bet || bet <= 0) {
+      if (bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet amount",
           ephemeral: true
         });
       }
 
-      if ((user.money || 0) < bet) {
+      if ((user.money ?? 0) < bet) {
         return interaction.reply({
           content: "❌ Not enough money",
           ephemeral: true
@@ -96,7 +97,7 @@ module.exports = {
           `━━━━━━━━━━━━━━`
         );
 
-        await sleep(350);
+        await sleep(300);
       }
 
       // =============================
@@ -108,17 +109,17 @@ module.exports = {
       if (a === b && b === c) {
         const symbol = symbols.find(s => s.emoji === a);
         win = true;
-        multiplier = symbol?.multiplier ?? 1;
+        multiplier = symbol?.multiplier || 1;
       }
 
       const change = win ? bet * multiplier : -bet;
 
-      user.money = (user.money || 0) + change;
+      user.money = (user.money ?? 0) + change;
 
       try {
         saveUser(user);
-      } catch (e) {
-        console.error("DB SAVE ERROR:", e);
+      } catch (err) {
+        console.error("DB SAVE ERROR:", err);
       }
 
       // =============================
@@ -152,7 +153,6 @@ module.exports = {
         .setTimestamp();
 
       return interaction.editReply({
-        content: null,
         embeds: [embed]
       });
 
