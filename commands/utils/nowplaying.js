@@ -17,49 +17,41 @@ module.exports = {
 
       const track = await getUserSpotify(target.id);
 
-      // =============================
-      // NOT LINKED / INVALID RESPONSE
-      // =============================
-      if (!track) {
+      // ❌ not linked
+      if (!track || track.status === "not_linked") {
         return i.reply({
           content: `❌ ${target.username} has not linked Spotify.`,
-          flags: 64
+          ephemeral: false
         });
       }
 
-      // =============================
-      // NORMALISE OLD + NEW FORMAT
-      // =============================
-      const status = track.status || "ok";
-
-      // error
-      if (status === "error") {
+      // ❌ error
+      if (track.status === "error") {
         return i.reply({
           content: `❌ Couldn't fetch Spotify data for ${target.username}.`,
-          flags: 64
+          ephemeral: false
         });
       }
 
-      // none playing
-      if (status === "none") {
+      // 🎧 nothing playing
+      if (track.status === "none") {
         return i.reply({
           content: `🎧 ${target.username} is not listening to anything.`,
-          flags: 64
+          ephemeral: false
         });
       }
 
       // =============================
-      // SUPPORT BOTH FORMATS:
-      // OLD: track.item
-      // NEW: track.name
+      // NORMALISE RESPONSE (IMPORTANT FIX)
       // =============================
-      const item = track.item || track;
+      const item = track.item ?? track;
 
-      const name = item.name || "Unknown";
+      const name = item.name || track.name || "Unknown Track";
+
       const artist =
         item.artists?.map(a => a.name).join(", ") ||
         track.artist ||
-        "Unknown";
+        "Unknown Artist";
 
       const url =
         item.external_urls?.spotify ||
@@ -73,12 +65,12 @@ module.exports = {
 
       return i.reply({
         content:
-          `🎧 **${target.username} is listening to:**\n` +
-          `🎵 ${name}\n` +
+          `🎧 **${target.username} is listening to Spotify:**\n` +
+          `🎵 **${name}**\n` +
           `👤 ${artist}\n` +
-          `🔗 ${url || "No link"}\n` +
+          `🔗 ${url || "No link available"}\n` +
           `${isPlaying ? "🟢 Live" : "⏸️ Paused"}`,
-        flags: 64
+        ephemeral: false
       });
 
     } catch (err) {
@@ -86,7 +78,7 @@ module.exports = {
 
       return i.reply({
         content: "❌ Spotify system error",
-        flags: 64
+        ephemeral: false
       });
     }
   }
