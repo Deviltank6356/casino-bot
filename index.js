@@ -1,54 +1,3 @@
-const fs = require("fs");
-const path = require("path");
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
-
-const { check } = require("./systems/cooldowns");
-const { logCommand } = require("./services/adminLogger");
-
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-client.commands = new Collection();
-
-// =============================
-// COMMAND LOADER
-// =============================
-function load(dir) {
-  for (const f of fs.readdirSync(dir)) {
-    const full = path.join(dir, f);
-
-    if (fs.lstatSync(full).isDirectory()) {
-      load(full);
-    } else {
-      console.log("📄 Loading file:", full);
-
-      try {
-        const cmd = require(full);
-
-        if (cmd?.data?.name && typeof cmd.execute === "function") {
-          client.commands.set(cmd.data.name, cmd);
-          console.log("✅ Registered:", cmd.data.name);
-        } else {
-          console.warn("⚠️ Invalid command skipped:", full);
-        }
-
-      } catch (err) {
-        console.error("❌ Failed loading:", full, err);
-      }
-    }
-  }
-}
-
-load(path.join(__dirname, "commands"));
-
-// =============================
-// READY EVENT
-// =============================
-client.once("ready", () => {
-  console.log("🚀 Casino bot online");
-});
-
-// =============================
-// INTERACTIONS
-// =============================
 client.on("interactionCreate", async (i) => {
 
   console.log("🔥 INTERACTION:", i.commandName || i.customId);
@@ -59,9 +8,18 @@ client.on("interactionCreate", async (i) => {
   if (i.isChatInputCommand()) {
 
     try {
-      logCommand(i);
-
       console.log("➡️ COMMAND:", i.commandName);
+
+      // =============================
+      // SAFE LOGGING (DOES NOT CRASH BOT)
+      // =============================
+      try {
+        if (typeof logCommand === "function") {
+          logCommand(i);
+        }
+      } catch (e) {
+        console.error("⚠️ logCommand failed:", e);
+      }
 
       const cd = check(i.user.id, i.commandName);
       console.log("⏳ Cooldown:", cd);
@@ -69,7 +27,7 @@ client.on("interactionCreate", async (i) => {
       if (cd) {
         return i.reply({
           content: `⏳ Wait ${Math.ceil(cd / 1000)}s`,
-          ephemeral: true
+          flags: 64
         });
       }
 
@@ -77,7 +35,10 @@ client.on("interactionCreate", async (i) => {
 
       if (!cmd) {
         console.log("❌ Command not found:", i.commandName);
-        return i.reply({ content: "❌ Command not found", ephemeral: true });
+        return i.reply({
+          content: "❌ Command not found",
+          flags: 64
+        });
       }
 
       console.log("🚀 Executing:", i.commandName);
@@ -90,14 +51,14 @@ client.on("interactionCreate", async (i) => {
       if (!i.replied) {
         return i.reply({
           content: "❌ Command crashed",
-          ephemeral: true
+          flags: 64
         });
       }
     }
   }
 
   // =============================
-  // BUTTONS (BLACKJACK FIXED)
+  // BUTTONS
   // =============================
   if (i.isButton()) {
 
@@ -109,7 +70,7 @@ client.on("interactionCreate", async (i) => {
     if (!game) {
       return i.reply({
         content: "❌ No active blackjack game",
-        ephemeral: true
+        flags: 64
       });
     }
 
@@ -117,7 +78,6 @@ client.on("interactionCreate", async (i) => {
 
       if (i.customId === "hit") {
         const g = bj.hit(i.user.id);
-
         if (!g) return;
 
         if (g.over) {
@@ -155,15 +115,8 @@ client.on("interactionCreate", async (i) => {
 
       return i.reply({
         content: "❌ Button error",
-        ephemeral: true
+        flags: 64
       });
     }
   }
 });
-
-// =============================
-// LOGIN
-// =============================
-client.login(require("./config.json").token);
-
-require("./auth");
