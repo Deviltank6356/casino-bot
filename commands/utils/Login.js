@@ -7,17 +7,17 @@ module.exports = {
     .setDescription("Link your Spotify account"),
 
   async execute(i) {
-    const baseUrl = config.spotify.baseUrl; 
-    // example: https://xxxx.trycloudflare.com
+    const baseUrl = config.spotify?.baseUrl;
 
-    if (!baseUrl) {
+    if (!baseUrl || typeof baseUrl !== "string") {
       return i.reply({
-        content: "❌ Spotify baseUrl not set in config.json",
+        content: "❌ Spotify baseUrl is missing in config.json",
         flags: 64
       });
     }
 
-    const url = `${baseUrl}/login?user=${i.user.id}`;
+    const cleanBase = baseUrl.replace(/\/$/, ""); // remove trailing slash
+    const url = `${cleanBase}/login?user=${i.user.id}`;
 
     return i.reply({
       content: `🔗 Click to link Spotify:\n${url}`,
