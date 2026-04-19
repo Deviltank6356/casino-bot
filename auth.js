@@ -6,7 +6,7 @@ const config = require("./config.json");
 const app = express();
 
 // =============================
-// SPOTIFY CLIENT (FROM CONFIG)
+// SPOTIFY CLIENT
 // =============================
 const spotify = new SpotifyWebApi({
   clientId: config.spotify.clientId,
@@ -15,7 +15,7 @@ const spotify = new SpotifyWebApi({
 });
 
 // =============================
-// LOGIN ROUTE
+// LOGIN ROUTE (FIXED SCOPES + FORCE CONSENT)
 // =============================
 app.get("/login", (req, res) => {
   const scopes = [
@@ -24,7 +24,12 @@ app.get("/login", (req, res) => {
     "user-read-playback-state"
   ];
 
-  const url = spotify.createAuthorizeURL(scopes);
+  const url = spotify.createAuthorizeURL(
+    scopes,
+    "state",
+    true // 🔥 forces re-consent so new scopes apply
+  );
+
   res.redirect(url);
 });
 
@@ -44,7 +49,6 @@ app.get("/callback", async (req, res) => {
     const accessToken = data.body.access_token;
     const refreshToken = data.body.refresh_token;
 
-    // set tokens immediately
     spotify.setAccessToken(accessToken);
     spotify.setRefreshToken(refreshToken);
 
@@ -54,10 +58,7 @@ app.get("/callback", async (req, res) => {
     console.log("🔁 REFRESH TOKEN:");
     console.log(refreshToken);
 
-    // =============================
-    // SAVE REFRESH TOKEN TO CONFIG
-    // (so bot can reuse it later)
-    // =============================
+    // save refresh token
     config.spotify.refreshToken = refreshToken;
 
     fs.writeFileSync(
