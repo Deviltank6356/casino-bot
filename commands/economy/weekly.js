@@ -7,25 +7,38 @@ module.exports = {
     .setName("weekly")
     .setDescription("Claim your weekly reward"),
 
-  async execute(i) {
+  async execute(interaction) {
     try {
-      const user = getUser(i.user.id);
+      const user = getUser(interaction.user.id);
 
-      if (!user?.started) {
-        return i.reply({ content: "❌ Run /start first", ephemeral: true });
+      // Optional safety check (only if you implemented started properly)
+      if (user.started !== 1) {
+        return interaction.reply({
+          content: "❌ Run /start first",
+          ephemeral: true
+        });
       }
 
-      const result = claim(i.user.id, "weekly");
+      const result = claim(interaction.user.id, "weekly");
 
-      if (result?.error) {
-        return i.reply({ content: result.error, ephemeral: true });
+      if (!result || result.error) {
+        return interaction.reply({
+          content: result?.error || "❌ Failed to claim reward",
+          ephemeral: true
+        });
       }
 
-      return i.reply(`🎁 +${result.amount}`);
+      return interaction.reply(`🎁 +${result.amount}`);
 
     } catch (err) {
       console.error("WEEKLY ERROR:", err);
-      return i.reply({ content: "❌ Command failed", ephemeral: true });
+
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Command failed",
+          ephemeral: true
+        });
+      }
     }
   }
 };

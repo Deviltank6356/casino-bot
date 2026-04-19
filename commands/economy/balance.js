@@ -6,15 +6,11 @@ module.exports = {
     .setName("balance")
     .setDescription("Check your balance"),
 
-  async execute(i) {
+  async execute(interaction) {
     try {
-      const user = getUser(i.user.id);
+      const user = getUser(interaction.user.id);
 
-      if (!user?.started) {
-        return i.reply({ content: "❌ Run /start first", ephemeral: true });
-      }
-
-      return i.reply(
+      return interaction.reply(
         `💰 Money: ${user.money ?? 0}\n` +
         `🏦 Bank: ${user.bank ?? 0}\n` +
         `⭐ XP: ${user.xp ?? 0}`
@@ -22,7 +18,10 @@ module.exports = {
 
     } catch (err) {
       console.error("BALANCE ERROR:", err);
-      return i.reply({ content: "❌ Failed to fetch balance", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Failed to fetch balance",
+        ephemeral: true
+      });
     }
   }
 };

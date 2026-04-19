@@ -9,13 +9,11 @@ const {
 const manager = require("../../games/blackjackManager");
 const { getUser } = require("../../db");
 
-// =============================
 // ACTIVE GAME LOCK
-// =============================
 const activeGames = new Map();
 
 function requireStart(user, interaction) {
-  if (!user.started) {
+  if (user.started !== 1) {
     interaction.reply({
       content: "❌ You must run /start first!",
       ephemeral: true
@@ -39,14 +37,13 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // =============================
-      // START CHECK
-      // =============================
+      // START CHECK (FIXED)
       if (!requireStart(user, interaction)) return;
 
       const bet = interaction.options.getInteger("bet");
 
-      if (!bet || bet <= 0) {
+      // BET VALIDATION
+      if (!Number.isFinite(bet) || bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet",
           ephemeral: true
@@ -60,9 +57,7 @@ module.exports = {
         });
       }
 
-      // =============================
       // GAME LOCK
-      // =============================
       if (activeGames.has(interaction.user.id)) {
         return interaction.reply({
           content: "❌ You already have an active blackjack game",
@@ -79,7 +74,7 @@ module.exports = {
         });
       }
 
-      activeGames.set(interaction.user.id, true);
+      activeGames.set(interaction.user.id, Date.now());
 
       const embed = new EmbedBuilder()
         .setTitle("🃏 Blackjack vs Dealer")
@@ -127,21 +122,20 @@ module.exports = {
     } catch (err) {
       console.error("BLACKJACK ERROR:", err);
 
-      return interaction.reply({
-        content: "❌ Command failed safely",
-        ephemeral: true
-      });
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Command failed safely",
+          ephemeral: true
+        });
+      }
     }
   },
 
-  // =============================
-  // CLEANUP FUNCTION (IMPORTANT)
-  // =============================
+  // CLEANUP
   endGame(userId) {
     activeGames.delete(userId);
   },
 
-  // export lock checker (optional for buttons)
   isActive(userId) {
     return activeGames.has(userId);
   }

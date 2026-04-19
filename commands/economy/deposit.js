@@ -12,30 +12,35 @@ module.exports = {
         .setRequired(true)
     ),
 
-  async execute(i) {
+  async execute(interaction) {
     try {
-      const amount = i.options.getInteger("amount");
-      const user = getUser(i.user.id);
-
-      if (!user?.started) {
-        return i.reply({ content: "❌ Run /start first", ephemeral: true });
-      }
+      const amount = interaction.options.getInteger("amount");
+      const user = getUser(interaction.user.id);
 
       if (!amount || amount <= 0) {
-        return i.reply({ content: "❌ Invalid amount", ephemeral: true });
+        return interaction.reply({
+          content: "❌ Invalid amount",
+          ephemeral: true
+        });
       }
 
-      const result = deposit(i.user.id, amount);
+      const result = deposit(interaction.user.id, amount);
 
       if (result?.error) {
-        return i.reply({ content: result.error, ephemeral: true });
+        return interaction.reply({
+          content: result.error,
+          ephemeral: true
+        });
       }
 
-      return i.reply("🏦 Deposited successfully");
+      return interaction.reply("🏦 Deposited successfully");
 
     } catch (err) {
       console.error("DEPOSIT ERROR:", err);
-      return i.reply({ content: "❌ Command failed", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Command failed",
+        ephemeral: true
+      });
     }
   }
 };

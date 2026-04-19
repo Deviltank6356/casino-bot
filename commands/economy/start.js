@@ -11,19 +11,21 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // CHECK IF ALREADY STARTED BY MONEY OR LEVEL
-      if (user.money > 0 || user.xp > 0) {
+      // REAL CHECK
+      if (user.started === 1) {
         return interaction.reply({
           content: "❌ You already started!",
           ephemeral: true
         });
       }
 
-      // GIVE STARTING VALUES
+      // INIT USER
       user.money = config.startingMoney ?? 1000;
       user.xp = config.startingXP ?? 0;
       user.level = config.startingLevel ?? 0;
       user.bank = config.startingBank ?? 0;
+
+      user.started = 1;
 
       saveUser(user);
 

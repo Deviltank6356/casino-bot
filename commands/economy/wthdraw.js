@@ -12,30 +12,47 @@ module.exports = {
         .setRequired(true)
     ),
 
-  async execute(i) {
+  async execute(interaction) {
     try {
-      const amount = i.options.getInteger("amount");
-      const user = getUser(i.user.id);
+      const amount = interaction.options.getInteger("amount");
+      const user = getUser(interaction.user.id);
 
-      if (!user?.started) {
-        return i.reply({ content: "❌ Run /start first", ephemeral: true });
+      // START CHECK (only works if you fixed DB started flag)
+      if (user.started !== 1) {
+        return interaction.reply({
+          content: "❌ Run /start first",
+          ephemeral: true
+        });
       }
 
-      if (!amount || amount <= 0) {
-        return i.reply({ content: "❌ Invalid amount", ephemeral: true });
+      // VALIDATION
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return interaction.reply({
+          content: "❌ Invalid amount",
+          ephemeral: true
+        });
       }
 
-      const result = withdraw(i.user.id, amount);
+      const result = withdraw(interaction.user.id, amount);
 
-      if (result?.error) {
-        return i.reply({ content: result.error, ephemeral: true });
+      if (!result || result.error) {
+        return interaction.reply({
+          content: result?.error || "❌ Withdraw failed",
+          ephemeral: true
+        });
       }
 
-      return i.reply("💰 Withdrawn successfully");
+      return interaction.reply(`💰 Withdrawn successfully: ${result.amount ?? amount}`);
 
     } catch (err) {
       console.error("WITHDRAW ERROR:", err);
-      return i.reply({ content: "❌ Command failed", ephemeral: true });
+
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Command failed",
+          ephemeral: true
+        });
+      }
     }
   }
 };

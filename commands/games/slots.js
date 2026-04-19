@@ -2,9 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { getUser, saveUser } = require("../../db");
 const { requireStart } = require("../../utils/requireStart");
 
-// =============================
 // SYMBOL SYSTEM
-// =============================
 const symbols = [
   { emoji: "🍒", weight: 45, multiplier: 2 },
   { emoji: "🔔", weight: 30, multiplier: 1.5 },
@@ -12,7 +10,6 @@ const symbols = [
   { emoji: "💎", weight: 5, multiplier: 5 }
 ];
 
-// =============================
 function roll() {
   const total = symbols.reduce((sum, s) => sum + s.weight, 0);
   let rand = Math.floor(Math.random() * total);
@@ -29,7 +26,6 @@ function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
 
-// =============================
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("slots")
@@ -41,30 +37,16 @@ module.exports = {
     ),
 
   async execute(interaction) {
-
-    // =============================
-    // /START CHECK (SAFE)
-    // =============================
-    const startCheck = requireStart(interaction);
-    if (!startCheck) {
-      return interaction.reply({
-        content: "❌ You must run /start first",
-        ephemeral: true
-      });
-    }
-
     try {
-      const bet = interaction.options.getInteger("bet");
       const user = getUser(interaction.user.id);
 
-      if (!user) {
-        return interaction.reply({
-          content: "❌ User not found",
-          ephemeral: true
-        });
-      }
+      // ✅ FIXED START CHECK (correct usage)
+      if (!requireStart(user, interaction)) return;
 
-      if (bet <= 0) {
+      const bet = interaction.options.getInteger("bet");
+
+      // BET VALIDATION FIX
+      if (!Number.isFinite(bet) || bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet amount",
           ephemeral: true
@@ -82,39 +64,32 @@ module.exports = {
 
       let a, b, c;
 
-      // =============================
       // ANIMATION
-      // =============================
       for (let i = 0; i < 5; i++) {
         a = roll().emoji;
         b = roll().emoji;
         c = roll().emoji;
 
         await interaction.editReply(
-          `🎰 **SLOTS**\n` +
-          `━━━━━━━━━━━━━━\n` +
-          `│ ${a} │ ${b} │ ${c} │\n` +
-          `━━━━━━━━━━━━━━`
+          `🎰 **SLOTS**\n━━━━━━━━━━━━━━\n│ ${a} │ ${b} │ ${c} │\n━━━━━━━━━━━━━━`
         );
 
         await sleep(300);
       }
 
-      // =============================
       // WIN CHECK
-      // =============================
       let win = false;
       let multiplier = 0;
 
       if (a === b && b === c) {
         const symbol = symbols.find(s => s.emoji === a);
         win = true;
-        multiplier = symbol?.multiplier || 1;
+        multiplier = symbol?.multiplier ?? 1;
       }
 
       const change = win ? bet * multiplier : -bet;
 
-      user.money = (user.money ?? 0) + change;
+      user.money = Number(user.money || 0) + change;
 
       try {
         saveUser(user);
@@ -122,39 +97,18 @@ module.exports = {
         console.error("DB SAVE ERROR:", err);
       }
 
-      // =============================
-      // RESULT EMBED
-      // =============================
       const embed = new EmbedBuilder()
         .setTitle("🎰 Slots")
         .setColor(win ? 0x00ff00 : 0xff0000)
         .addFields(
-          {
-            name: "🎲 Result",
-            value: `│ ${a} │ ${b} │ ${c} │`,
-            inline: false
-          },
-          {
-            name: "💰 Bet",
-            value: `${bet}`,
-            inline: true
-          },
-          {
-            name: "📊 Change",
-            value: `${change >= 0 ? "+" : ""}${change}`,
-            inline: true
-          },
-          {
-            name: "🎯 Outcome",
-            value: win ? "🟢 WIN" : "🔴 LOSE",
-            inline: false
-          }
+          { name: "🎲 Result", value: `│ ${a} │ ${b} │ ${c} │`, inline: false },
+          { name: "💰 Bet", value: `${bet}`, inline: true },
+          { name: "📊 Change", value: `${change >= 0 ? "+" : ""}${change}`, inline: true },
+          { name: "🎯 Outcome", value: win ? "🟢 WIN" : "🔴 LOSE", inline: false }
         )
         .setTimestamp();
 
-      return interaction.editReply({
-        embeds: [embed]
-      });
+      return interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
       console.error("SLOTS ERROR:", err);

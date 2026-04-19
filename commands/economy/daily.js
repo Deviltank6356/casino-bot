@@ -7,25 +7,27 @@ module.exports = {
     .setName("daily")
     .setDescription("Claim your daily reward"),
 
-  async execute(i) {
+  async execute(interaction) {
     try {
-      const user = getUser(i.user.id);
+      const user = getUser(interaction.user.id);
 
-      if (!user?.started) {
-        return i.reply({ content: "❌ Run /start first", ephemeral: true });
-      }
-
-      const result = claim(i.user.id, "daily");
+      const result = claim(interaction.user.id, "daily");
 
       if (result?.error) {
-        return i.reply({ content: result.error, ephemeral: true });
+        return interaction.reply({
+          content: result.error,
+          ephemeral: true
+        });
       }
 
-      return i.reply(`🎁 +${result.amount}`);
+      return interaction.reply(`🎁 +${result.amount}`);
 
     } catch (err) {
       console.error("DAILY ERROR:", err);
-      return i.reply({ content: "❌ Command failed", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Command failed",
+        ephemeral: true
+      });
     }
   }
 };
