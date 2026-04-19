@@ -1,11 +1,28 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { getUser, saveUser } = require("../../db");
 
+// =============================
+// RED NUMBERS
+// =============================
 function isRed(number) {
   return [
     1,3,5,7,9,12,14,16,18,
     19,21,23,25,27,30,32,34,36
   ].includes(number);
+}
+
+// =============================
+// REQUIRE START CHECK
+// =============================
+function requireStart(user, interaction) {
+  if (!user.started) {
+    interaction.reply({
+      content: "❌ You must run /start first!",
+      ephemeral: true
+    });
+    return false;
+  }
+  return true;
 }
 
 module.exports = {
@@ -24,41 +41,51 @@ module.exports = {
     )
     .addIntegerOption(o =>
       o.setName("number")
-        .setDescription("Only for number bet")
+        .setDescription("Only for number bet (0–36)")
     ),
 
   async execute(interaction) {
     try {
-      const bet = interaction.options.getInteger("bet");
-      const type = interaction.options.getString("type");
-      const pick = interaction.options.getInteger("number");
-
       const user = getUser(interaction.user.id);
 
-      if (!user) {
-        return interaction.reply({ content: "❌ User not found", ephemeral: true });
+      // =============================
+      // START CHECK (NEW)
+      // =============================
+      if (!requireStart(user, interaction)) return;
+
+      let bet = interaction.options.getInteger("bet");
+      let type = interaction.options.getString("type");
+      const pick = interaction.options.getInteger("number");
+
+      if (!bet || bet <= 0) {
+        return interaction.reply({
+          content: "❌ Invalid bet",
+          ephemeral: true
+        });
       }
 
-      if (!bet || isNaN(bet) || bet <= 0) {
-        return interaction.reply({ content: "❌ Invalid bet", ephemeral: true });
+      if (user.money < bet) {
+        return interaction.reply({
+          content: "❌ Not enough money",
+          ephemeral: true
+        });
       }
 
-      if ((user.money || 0) < bet) {
-        return interaction.reply({ content: "❌ Not enough money", ephemeral: true });
-      }
+      // normalize
+      type = String(type).toLowerCase();
 
       const result = Math.floor(Math.random() * 37);
 
       let win = false;
       let multiplier = 0;
 
-      // =========================
+      // =============================
       // NUMBER BET
-      // =========================
+      // =============================
       if (type === "number") {
-        if (pick == null || isNaN(pick)) {
+        if (pick === null || pick < 0 || pick > 36) {
           return interaction.reply({
-            content: "❌ You must pick a number (0–36)",
+            content: "❌ Pick a number between 0–36",
             ephemeral: true
           });
         }
@@ -67,9 +94,9 @@ module.exports = {
         multiplier = 35;
       }
 
-      // =========================
+      // =============================
       // COLOR BETS
-      // =========================
+      // =============================
       else if (type === "red") {
         win = result !== 0 && isRed(result);
         multiplier = 2;
@@ -79,21 +106,21 @@ module.exports = {
         multiplier = 2;
       }
 
-      // =========================
+      // =============================
       // EVEN / ODD
-      // =========================
+      // =============================
       else if (type === "even") {
         win = result !== 0 && result % 2 === 0;
         multiplier = 2;
       }
       else if (type === "odd") {
-        win = result % 2 === 1;
+        win = result !== 0 && result % 2 === 1;
         multiplier = 2;
       }
 
-      // =========================
+      // =============================
       // HIGH / LOW
-      // =========================
+      // =============================
       else if (type === "high") {
         win = result >= 19 && result <= 36;
         multiplier = 2;
@@ -110,8 +137,10 @@ module.exports = {
         });
       }
 
+      // =============================
+      // APPLY RESULT
+      // =============================
       const change = win ? bet * multiplier : -bet;
-
       user.money = (user.money || 0) + change;
 
       saveUser(user);
@@ -132,10 +161,12 @@ module.exports = {
     } catch (err) {
       console.error("ROULETTE ERROR:", err);
 
-      return interaction.reply({
-        content: "❌ Command failed safely",
-        ephemeral: true
-      });
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Command failed safely",
+          ephemeral: true
+        });
+      }
     }
   }
 };

@@ -1,15 +1,22 @@
 const express = require("express");
 const SpotifyWebApi = require("spotify-web-api-node");
+const fs = require("fs");
+const config = require("./config.json");
 
 const app = express();
 
+// =============================
+// SPOTIFY CLIENT (FROM CONFIG)
+// =============================
 const spotify = new SpotifyWebApi({
-  clientId: "bf81e117c0314819a3f9877ca8b3f157",
-  clientSecret: "d8e2260efcf94c9a874d2c3198263c36",
-  redirectUri: "https://solving-final-fort-crystal.trycloudflare.com/callback"
+  clientId: config.spotify.clientId,
+  clientSecret: config.spotify.clientSecret,
+  redirectUri: config.spotify.redirectUri
 });
 
-// LOGIN
+// =============================
+// LOGIN ROUTE
+// =============================
 app.get("/login", (req, res) => {
   const scopes = [
     "user-read-currently-playing",
@@ -21,26 +28,55 @@ app.get("/login", (req, res) => {
   res.redirect(url);
 });
 
-// CALLBACK
+// =============================
+// CALLBACK ROUTE
+// =============================
 app.get("/callback", async (req, res) => {
   try {
     const code = req.query.code;
 
+    if (!code) {
+      return res.status(400).send("Missing code");
+    }
+
     const data = await spotify.authorizationCodeGrant(code);
 
+    const accessToken = data.body.access_token;
     const refreshToken = data.body.refresh_token;
 
-    console.log("REFRESH TOKEN:");
+    // set tokens immediately
+    spotify.setAccessToken(accessToken);
+    spotify.setRefreshToken(refreshToken);
+
+    console.log("✅ ACCESS TOKEN:");
+    console.log(accessToken);
+
+    console.log("🔁 REFRESH TOKEN:");
     console.log(refreshToken);
 
-    res.send("Success — check console");
+    // =============================
+    // SAVE REFRESH TOKEN TO CONFIG
+    // (so bot can reuse it later)
+    // =============================
+    config.spotify.refreshToken = refreshToken;
+
+    fs.writeFileSync(
+      "./config.json",
+      JSON.stringify(config, null, 2)
+    );
+
+    res.send("Spotify connected successfully ✔ You can close this tab.");
+
   } catch (err) {
-    console.error(err);
-    res.send("Auth failed");
+    console.error("Spotify auth error:", err?.body || err.message || err);
+    res.status(500).send("Auth failed");
   }
 });
 
-// IMPORTANT FIX
+// =============================
+// START SERVER
+// =============================
 app.listen(3000, "0.0.0.0", () => {
-  console.log("Go to http://solving-final-fort-crystal.trycloudflare.com/login");
+  console.log("Server running");
+  console.log(`Login: https://solving-final-fort-crystal.trycloudflare.com/login`);
 });

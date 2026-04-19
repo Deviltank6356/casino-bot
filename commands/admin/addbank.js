@@ -22,32 +22,40 @@ module.exports = {
 
   async execute(i, client) {
     try {
-      // permission check
       if (!isAdmin(i.user.id)) {
-        return i.reply({ content: "❌ No permission", ephemeral: true });
+        return i.reply({
+          content: "❌ No permission",
+          ephemeral: true
+        });
       }
 
       const target = i.options.getUser("user");
       const amount = i.options.getInteger("amount");
 
-      // validation
       if (!target) {
-        return i.reply({ content: "❌ User not found", ephemeral: true });
+        return i.reply({
+          content: "❌ User not found",
+          ephemeral: true
+        });
       }
 
-      if (!amount || amount <= 0) {
+      if (!Number.isInteger(amount) || amount <= 0) {
         return i.reply({
           content: "❌ Invalid amount",
           ephemeral: true
         });
       }
 
-      // update DB
       const user = getUser(target.id);
+
+      // safety fallback
+      if (typeof user.bank !== "number") user.bank = 0;
+
       user.bank += amount;
+
       saveUser(user);
 
-      // SAFE LOGGING (prevents crashes)
+      // safe logging
       try {
         await logAdminAction(
           client,
@@ -59,15 +67,20 @@ module.exports = {
         console.error("LOG ERROR:", err);
       }
 
-      return i.reply(`🏦 Added ${amount} to bank`);
+      return i.reply({
+        content: `🏦 Added ${amount} to bank`,
+        ephemeral: true
+      });
 
     } catch (err) {
       console.error("ADDBANK ERROR:", err);
 
-      return i.reply({
-        content: "❌ Error adding bank money",
-        ephemeral: true
-      });
+      if (!i.replied) {
+        return i.reply({
+          content: "❌ Error adding bank money",
+          ephemeral: true
+        });
+      }
     }
   }
 };

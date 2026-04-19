@@ -4,6 +4,25 @@ const config = require("./config.json");
 const db = new Database("casino.db");
 
 // =============================
+// CONSTANT DEFAULTS
+// =============================
+const DEFAULT_STREAKS = {
+  daily: { count: 0, last: 0 },
+  weekly: { count: 0, last: 0 },
+  monthly: { count: 0, last: 0 }
+};
+
+const DEFAULT_USER = () => ({
+  money: config.startingMoney ?? 0,
+  xp: config.startingXP ?? 0,
+  level: config.startingLevel ?? 0,
+  bank: config.startingBank ?? 0,
+  claims: {},
+  streaks: structuredClone(DEFAULT_STREAKS),
+  joinedAt: Date.now()
+});
+
+// =============================
 // TABLE SETUP
 // =============================
 db.prepare(`
@@ -15,19 +34,48 @@ CREATE TABLE IF NOT EXISTS users (
   bank INTEGER DEFAULT 0,
   claims TEXT DEFAULT '{}',
   streaks TEXT DEFAULT '{}',
-  joinedAt INTEGER DEFAULT (strftime('%s','now'))
+  joinedAt INTEGER DEFAULT (strftime('%s','now') * 1000)
 )
 `).run();
 
 // =============================
 // SAFE JSON PARSE
 // =============================
-function safeParse(str, fallback = {}) {
+function safeParse(input, fallback = {}) {
   try {
-    return JSON.parse(str || "{}");
+    return JSON.parse(input || "{}");
   } catch {
     return fallback;
   }
+}
+
+// =============================
+// NORMALIZE DATA (VERY IMPORTANT)
+// =============================
+function normalizeUser(user) {
+  return {
+    ...user,
+    money: user.money ?? 0,
+    xp: user.xp ?? 0,
+    level: user.level ?? 0,
+    bank: user.bank ?? 0,
+    claims: safeParse(user.claims, {}),
+    streaks: {
+      daily: {
+        ...DEFAULT_STREAKS.daily,
+        ...(safeParse(user.streaks).daily || {})
+      },
+      weekly: {
+        ...DEFAULT_STREAKS.weekly,
+        ...(safeParse(user.streaks).weekly || {})
+      },
+      monthly: {
+        ...DEFAULT_STREAKS.monthly,
+        ...(safeParse(user.streaks).monthly || {})
+      }
+    },
+    joinedAt: user.joinedAt ?? Date.now()
+  };
 }
 
 // =============================
@@ -37,26 +85,13 @@ function getUser(id) {
   let user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
 
   if (!user) {
-    const newUser = {
-      id,
-      money: config.startingMoney ?? 0,
-      xp: config.startingXP ?? 0,
-      level: config.startingLevel ?? 0,
-      bank: config.startingBank ?? 0,
-      claims: {},
-      streaks: {
-        daily: { count: 0, last: 0 },
-        weekly: { count: 0, last: 0 },
-        monthly: { count: 0, last: 0 }
-      },
-      joinedAt: Date.now()
-    };
+    const newUser = { id, ...DEFAULT_USER() };
 
     db.prepare(`
       INSERT INTO users (id, money, xp, level, bank, claims, streaks, joinedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      newUser.id,
+      id,
       newUser.money,
       newUser.xp,
       newUser.level,
@@ -69,21 +104,15 @@ function getUser(id) {
     return newUser;
   }
 
-  return {
-    ...user,
-    claims: safeParse(user.claims),
-    streaks: safeParse(user.streaks, {
-      daily: { count: 0, last: 0 },
-      weekly: { count: 0, last: 0 },
-      monthly: { count: 0, last: 0 }
-    })
-  };
+  return normalizeUser(user);
 }
 
 // =============================
 // SAVE USER
 // =============================
-function saveUser(u) {
+function saveUser(user) {
+  const u = normalizeUser(user);
+
   db.prepare(`
     UPDATE users
     SET money = ?,
@@ -94,14 +123,18 @@ function saveUser(u) {
         streaks = ?
     WHERE id = ?
   `).run(
-    u.money ?? 0,
-    u.xp ?? 0,
-    u.level ?? 0,
-    u.bank ?? 0,
-    JSON.stringify(u.claims ?? {}),
-    JSON.stringify(u.streaks ?? {}),
+    u.money,
+    u.xp,
+    u.level,
+    u.bank,
+    JSON.stringify(u.claims),
+    JSON.stringify(u.streaks),
     u.id
   );
 }
 
-module.exports = { getUser, saveUser, db };
+module.exports = {
+  db,
+  getUser,
+  saveUser
+};

@@ -8,23 +8,38 @@ module.exports = {
     .setDescription("Begin your journey and receive a starting bonus"),
 
   async execute(interaction) {
-    const user = getUser(interaction.user.id);
+    try {
+      const user = getUser(interaction.user.id);
 
-    if (user.money > 0 || user.xp > 0) {
+      if (user.started) {
+        return interaction.reply({
+          content: "❌ You already started!",
+          ephemeral: true
+        });
+      }
+
+      user.money = config.startingMoney ?? 0;
+      user.xp = config.startingXP ?? 0;
+      user.level = config.startingLevel ?? 0;
+      user.bank = config.startingBank ?? 0;
+      user.started = 1;
+
+      saveUser(user);
+
+      return interaction.reply(
+        "🎉 **Welcome to the casino!**\n" +
+        `💰 Starting money: ${user.money}\n` +
+        "━━━━━━━━━━━━━━\n" +
+        "You can now use:\n" +
+        "🎰 /slots\n🎡 /roulette\n🃏 /blackjack\n💰 /balance\n"
+      );
+
+    } catch (err) {
+      console.error("START ERROR:", err);
       return interaction.reply({
-        content: "❌ You have already started!",
+        content: "❌ Failed to start",
         ephemeral: true
       });
     }
-
-    user.money = config.startingMoney;
-    saveUser(user);
-
-    return interaction.reply(
-      "🎉 Welcome to the casino!\n" +
-      `💰 You received ${config.startingMoney} starting money.\n` +
-      "Use /balance, /blackjack, /slots, /roulette to play.\n" +
-      "New players earn double money for 1 week or until they reach 50k!"
-    );
   }
 };

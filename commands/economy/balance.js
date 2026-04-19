@@ -7,12 +7,22 @@ module.exports = {
     .setDescription("Check your balance"),
 
   async execute(i) {
-    const user = getUser(i.user.id);
+    try {
+      const user = getUser(i.user.id);
 
-    return i.reply(
-      `💰 Money: ${user.money}\n` +
-      `🏦 Bank: ${user.bank}\n` +
-      `⭐ XP: ${user.xp}`
-    );
+      if (!user?.started) {
+        return i.reply({ content: "❌ Run /start first", ephemeral: true });
+      }
+
+      return i.reply(
+        `💰 Money: ${user.money ?? 0}\n` +
+        `🏦 Bank: ${user.bank ?? 0}\n` +
+        `⭐ XP: ${user.xp ?? 0}`
+      );
+
+    } catch (err) {
+      console.error("BALANCE ERROR:", err);
+      return i.reply({ content: "❌ Failed to fetch balance", ephemeral: true });
+    }
   }
 };
