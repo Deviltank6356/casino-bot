@@ -10,11 +10,10 @@ const spotify = new SpotifyWebApi({
 let lastRefresh = 0;
 
 // =============================
-// REFRESH TOKEN (SAFE + DIAGNOSED)
+// REFRESH TOKEN (SAFE)
 // =============================
 async function refreshToken() {
   try {
-    // ❌ no refresh token = hard stop
     if (!config.spotify.refreshToken) {
       console.error("❌ Missing Spotify refresh token in config");
       return false;
@@ -22,7 +21,6 @@ async function refreshToken() {
 
     const now = Date.now();
 
-    // cooldown to avoid spam refresh
     if (now - lastRefresh < 300000) return true;
 
     const data = await spotify.refreshAccessToken();
@@ -32,36 +30,33 @@ async function refreshToken() {
       return false;
     }
 
-    const accessToken = data.body.access_token;
-
-    spotify.setAccessToken(accessToken);
+    spotify.setAccessToken(data.body.access_token);
 
     lastRefresh = now;
 
     return true;
 
   } catch (err) {
-    console.error(
-      "❌ Spotify refresh error:",
-      err?.body || err?.message || err
-    );
+    console.error("❌ Spotify refresh error FULL:", {
+      message: err?.message,
+      body: err?.body,
+      status: err?.statusCode,
+      stack: err?.stack
+    });
+
     return false;
   }
 }
 
 // =============================
-// NOW PLAYING (SAFE + EXPLICIT STATES)
+// NOW PLAYING
 // =============================
 async function getNowPlaying() {
   try {
     const ok = await refreshToken();
 
-    // 🔥 distinguish real failure vs no token
-    if (!ok) {
-      return { status: "error" };
-    }
+    if (!ok) return { status: "error" };
 
-    // safety: ensure token exists before API call
     if (!spotify.getAccessToken()) {
       const refreshed = await refreshToken();
       if (!refreshed) return { status: "error" };
@@ -69,7 +64,6 @@ async function getNowPlaying() {
 
     const res = await spotify.getMyCurrentPlayingTrack();
 
-    // nothing playing
     if (!res?.body?.item) {
       return { status: "none" };
     }
@@ -85,10 +79,12 @@ async function getNowPlaying() {
     };
 
   } catch (err) {
-    console.error(
-      "❌ Spotify API error:",
-      err?.body || err?.message || err
-    );
+    console.error("❌ Spotify API error FULL:", {
+      message: err?.message,
+      body: err?.body,
+      status: err?.statusCode,
+      stack: err?.stack
+    });
 
     return { status: "error" };
   }
