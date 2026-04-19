@@ -2,9 +2,6 @@ const Database = require("better-sqlite3");
 const config = require("./config.json");
 const path = require("path");
 
-// =============================
-// DB (PM2 SAFE PATH)
-// =============================
 const db = new Database(path.join(__dirname, "casino.db"));
 
 // =============================
@@ -22,14 +19,19 @@ function createDefaultUser() {
     xp: config.startingXP ?? 0,
     level: config.startingLevel ?? 0,
     bank: config.startingBank ?? 0,
+
     claims: {},
     streaks: structuredClone(DEFAULT_STREAKS),
+
+    // 🔥 THIS WAS MISSING
+    started: 0,
+
     joinedAt: Date.now()
   };
 }
 
 // =============================
-// TABLE SETUP
+// TABLE SETUP (IMPORTANT FIX)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -38,8 +40,12 @@ CREATE TABLE IF NOT EXISTS users (
   xp INTEGER DEFAULT 0,
   level INTEGER DEFAULT 0,
   bank INTEGER DEFAULT 0,
+
   claims TEXT DEFAULT '{}',
   streaks TEXT DEFAULT '{}',
+
+  started INTEGER DEFAULT 0,
+
   joinedAt INTEGER DEFAULT (strftime('%s','now') * 1000)
 );
 `).run();
@@ -69,18 +75,23 @@ function normalizeUser(raw) {
     xp: Number(raw.xp) || 0,
     level: Number(raw.level) || 0,
     bank: Number(raw.bank) || 0,
+
     claims: safeParse(raw.claims),
     streaks: {
       daily: { ...DEFAULT_STREAKS.daily, ...(streaks.daily || {}) },
       weekly: { ...DEFAULT_STREAKS.weekly, ...(streaks.weekly || {}) },
       monthly: { ...DEFAULT_STREAKS.monthly, ...(streaks.monthly || {}) }
     },
+
+    // 🔥 FIXED: NOW ALWAYS LOADED
+    started: Number(raw.started ?? 0),
+
     joinedAt: Number(raw.joinedAt) || Date.now()
   };
 }
 
 // =============================
-// GET USER (AUTO CREATE)
+// GET USER
 // =============================
 function getUser(id) {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
@@ -90,8 +101,9 @@ function getUser(id) {
 
     db.prepare(`
       INSERT INTO users (
-        id, money, xp, level, bank, claims, streaks, joinedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, money, xp, level, bank,
+        claims, streaks, started, joinedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       user.money,
@@ -100,6 +112,7 @@ function getUser(id) {
       user.bank,
       JSON.stringify(user.claims),
       JSON.stringify(user.streaks),
+      user.started,
       user.joinedAt
     );
 
@@ -122,7 +135,8 @@ function saveUser(user) {
       level = ?,
       bank = ?,
       claims = ?,
-      streaks = ?
+      streaks = ?,
+      started = ?
     WHERE id = ?
   `).run(
     u.money,
@@ -131,6 +145,7 @@ function saveUser(user) {
     u.bank,
     JSON.stringify(u.claims),
     JSON.stringify(u.streaks),
+    u.started,
     u.id
   );
 }
