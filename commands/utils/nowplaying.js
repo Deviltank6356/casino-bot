@@ -10,16 +10,18 @@ module.exports = {
     try {
       const track = await getNowPlaying();
 
-      if (!track) {
+      // 🔥 HARD FIX: distinguish "no song" vs "Spotify broken"
+      if (track === null) {
         return i.reply({
-          content: "❌ Spotify not available.",
+          content: "🎧 Nothing is currently playing.",
           ephemeral: true
         });
       }
 
-      if (!track.isPlaying) {
+      // extra safety (should rarely happen now)
+      if (!track.name || !track.artist) {
         return i.reply({
-          content: "🎧 Nothing is currently playing.",
+          content: "❌ Spotify returned incomplete data.",
           ephemeral: true
         });
       }
@@ -29,14 +31,15 @@ module.exports = {
           `🎧 **Now Playing**\n` +
           `🎵 ${track.name}\n` +
           `👤 ${track.artist}\n` +
-          `🔗 ${track.url}`
+          `🔗 ${track.url || "No link"}\n` +
+          `${track.isPlaying ? "🟢 Playing" : "⏸️ Paused"}`
       });
 
     } catch (err) {
-      console.error("Spotify error:", err);
+      console.error("Spotify command error:", err);
 
       return i.reply({
-        content: "❌ Spotify system error",
+        content: "❌ Spotify system error (check logs)",
         ephemeral: true
       });
     }
