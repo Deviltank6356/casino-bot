@@ -7,11 +7,21 @@ module.exports = {
     .setDescription("Link your Spotify account"),
 
   async execute(i) {
-    const url = `${config.spotify.authUrl}/login?user=${i.user.id}`;
+    const baseUrl = config.spotify.baseUrl; 
+    // example: https://xxxx.trycloudflare.com
+
+    if (!baseUrl) {
+      return i.reply({
+        content: "❌ Spotify baseUrl not set in config.json",
+        flags: 64
+      });
+    }
+
+    const url = `${baseUrl}/login?user=${i.user.id}`;
 
     return i.reply({
       content: `🔗 Click to link Spotify:\n${url}`,
-      flags: 64 // ephemeral replacement
+      flags: 64
     });
   }
 };
