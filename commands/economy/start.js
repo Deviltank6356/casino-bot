@@ -11,22 +11,24 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // REAL CHECK
-      if (user.started === 1) {
+      // 🔒 HARD BLOCK: already started
+      if (Number(user.started) === 1) {
         return interaction.reply({
           content: "❌ You already started!",
           ephemeral: true
         });
       }
 
-      // INIT USER
+      // 🎯 INITIALISE USER (ONLY ONCE EVER)
       user.money = config.startingMoney ?? 1000;
       user.xp = config.startingXP ?? 0;
       user.level = config.startingLevel ?? 0;
       user.bank = config.startingBank ?? 0;
 
+      // 🔒 PERMANENT FLAG
       user.started = 1;
 
+      // SAVE TO DB (CRITICAL)
       saveUser(user);
 
       return interaction.reply(
