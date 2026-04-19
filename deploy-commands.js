@@ -4,41 +4,49 @@ function loadCommands(dir) {
   for (const file of files) {
     const fullPath = path.join(dir, file);
 
-    const stat = fs.lstatSync(fullPath);
-
-    if (stat.isDirectory()) {
-      loadCommands(fullPath);
-      continue;
-    }
-
-    console.log("➡️ RAW FILE:", fullPath);
-
-    if (!file.endsWith(".js")) {
-      console.log("⏭️ NOT JS:", file);
-      continue;
-    }
-
     try {
-      console.log("📥 REQUIRING:", fullPath);
+      const stat = fs.lstatSync(fullPath);
 
-      const command = require(fullPath);
-
-      console.log("📦 EXPORT:", fullPath, command);
-
-      if (!command?.data) {
-        console.log("❌ NO DATA:", fullPath);
+      // recursive folders
+      if (stat.isDirectory()) {
+        loadCommands(fullPath);
         continue;
       }
 
-      const json = command.data.toJSON?.();
+      if (!file.endsWith(".js")) continue;
 
-      console.log("📄 JSON:", json);
+      console.log(`📂 Checking: ${fullPath}`);
 
+      delete require.cache[require.resolve(fullPath)];
+
+      const command = require(fullPath);
+
+      if (!command?.data?.toJSON) {
+        console.log(`⚠️ Skipped invalid command: ${fullPath}`);
+        continue;
+      }
+
+      const json = command.data.toJSON();
+
+      if (!json?.name) {
+        console.log(`⚠️ Missing name: ${fullPath}`);
+        continue;
+      }
+
+      const name = json.name.toLowerCase().trim();
+
+      if (seen.has(name)) {
+        console.log(`❌ Duplicate skipped: ${name}`);
+        continue;
+      }
+
+      seen.add(name);
       commands.push(json);
-      console.log("✅ ADDED:", json?.name);
+
+      console.log(`✅ Loaded: ${name}`);
 
     } catch (err) {
-      console.error("💥 CRASH IN FILE:", fullPath);
+      console.error(`💥 Error loading: ${fullPath}`);
       console.error(err);
     }
   }
