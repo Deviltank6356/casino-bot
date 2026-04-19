@@ -1,116 +1,65 @@
-const bj = require("./games/blackjackManager");
+const { Client, GatewayIntentBits, Collection } = require("discord.js");
+const fs = require("fs");
+const path = require("path");
 
+const config = require("./config.json");
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
+
+client.commands = new Collection();
+
+// =============================
+// LOAD COMMANDS
+// =============================
+function load(dir) {
+  for (const file of fs.readdirSync(dir)) {
+    const full = path.join(dir, file);
+
+    if (fs.lstatSync(full).isDirectory()) {
+      load(full);
+      continue;
+    }
+
+    const cmd = require(full);
+
+    if (cmd?.data?.name && cmd?.execute) {
+      client.commands.set(cmd.data.name, cmd);
+      console.log("✅ Loaded:", cmd.data.name);
+    }
+  }
+}
+
+load(path.join(__dirname, "commands"));
+
+// =============================
+// READY
+// =============================
+client.once("ready", () => {
+  console.log("🚀 Casino bot online");
+});
+
+// =============================
+// INTERACTIONS
+// =============================
 client.on("interactionCreate", async (i) => {
+  if (!i.isChatInputCommand()) return;
+
+  const cmd = client.commands.get(i.commandName);
+  if (!cmd) return i.reply({ content: "❌ Not found", ephemeral: true });
+
   try {
-    console.log("🔥 INTERACTION:", i.commandName || i.customId);
-
-    // =============================
-    // SLASH COMMANDS
-    // =============================
-    if (i.isChatInputCommand()) {
-      console.log("➡️ COMMAND:", i.commandName);
-
-      // SAFE LOGGING
-      try {
-        if (typeof logCommand === "function") {
-          logCommand(i);
-        }
-      } catch (e) {
-        console.error("⚠️ logCommand failed:", e);
-      }
-
-      const cd = check(i.user.id, i.commandName);
-
-      if (cd) {
-        return i.reply({
-          content: `⏳ Wait ${Math.ceil(cd / 1000)}s`,
-          ephemeral: true
-        });
-      }
-
-      const cmd = client.commands.get(i.commandName);
-
-      if (!cmd) {
-        return i.reply({
-          content: "❌ Command not found",
-          ephemeral: true
-        });
-      }
-
-      console.log("🚀 Executing:", i.commandName);
-      return await cmd.execute(i, client);
-    }
-
-    // =============================
-    // BUTTONS
-    // =============================
-    if (!i.isButton()) return;
-
-    console.log("🔘 BUTTON:", i.customId);
-
-    const game = bj.getGame(i.user.id);
-
-    if (!game) {
-      return i.reply({
-        content: "❌ No active blackjack game",
-        ephemeral: true
-      });
-    }
-
-    // =============================
-    // HIT BUTTON
-    // =============================
-    if (i.customId === "hit") {
-      const g = bj.hit(i.user.id);
-      if (!g) return;
-
-      if (g.over) {
-        return i.update({
-          content: `💥 BUST!\n🧑 ${g.player} vs 🎩 ${g.dealer}\n🏁 YOU LOSE`,
-          components: []
-        });
-      }
-
-      return i.update({
-        content: `🧑 ${g.player} vs 🎩 ${g.dealer}`,
-        components: i.message.components
-      });
-    }
-
-    // =============================
-    // STAND BUTTON
-    // =============================
-    if (i.customId === "stand") {
-      const g = bj.stand(i.user.id);
-      if (!g) return;
-
-      let resultText = "LOSE";
-      if (g.result === "win") resultText = "WIN";
-      if (g.result === "push") resultText = "PUSH";
-
-      return i.update({
-        content:
-          `🏁 FINAL RESULT\n` +
-          `🧑 ${g.player}\n` +
-          `🎩 ${g.dealer}\n` +
-          `💰 RESULT: ${resultText}`,
-        components: []
-      });
-    }
-
-    // =============================
-    // UNKNOWN BUTTON SAFETY
-    // =============================
-    return;
-
+    await cmd.execute(i, client);
   } catch (err) {
-    console.error("💥 INTERACTION ERROR:", err);
-
-    if (!i.replied && !i.deferred) {
-      return i.reply({
-        content: "❌ Something went wrong",
-        ephemeral: true
-      });
+    console.error(err);
+    if (!i.replied) {
+      return i.reply({ content: "❌ Error", ephemeral: true });
     }
   }
 });
+
+// =============================
+// LOGIN
+// =============================
+client.login(config.token);
