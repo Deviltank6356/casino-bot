@@ -17,35 +17,37 @@ module.exports = {
 
       const track = await getUserSpotify(target.id);
 
-      // ❌ not linked
-      if (!track) {
+      // ❌ not linked OR service error
+      if (!track || track.status === "not_linked") {
         return i.reply({
           content: `❌ ${target.username} has not linked Spotify.`,
           flags: 64
         });
       }
 
+      if (track.status === "error") {
+        return i.reply({
+          content: `❌ Couldn't fetch Spotify data for ${target.username}.`,
+          flags: 64
+        });
+      }
+
       // 🎧 nothing playing
-      if (!track.item) {
+      if (track.status === "none") {
         return i.reply({
           content: `🎧 ${target.username} is not listening to anything.`,
           flags: 64
         });
       }
 
-      const song = track.item.name || "Unknown";
-      const artist =
-        track.item.artists?.map(a => a.name).join(", ") || "Unknown";
-      const url = track.item.external_urls?.spotify || null;
-      const isPlaying = track.is_playing;
-
+      // ✅ playing
       return i.reply({
         content:
           `🎧 **${target.username} is listening to:**\n` +
-          `🎵 ${song}\n` +
-          `👤 ${artist}\n` +
-          `🔗 ${url || "No link"}\n` +
-          `${isPlaying ? "🟢 Live" : "⏸️ Paused"}`,
+          `🎵 ${track.name}\n` +
+          `👤 ${track.artist}\n` +
+          `🔗 ${track.url || "No link"}\n` +
+          `${track.isPlaying ? "🟢 Live" : "⏸️ Paused"}`,
         flags: 64
       });
 

@@ -23,7 +23,6 @@ function createDefaultUser() {
 
     started: 0,
 
-    // 🔥 SPOTIFY SUPPORT (IMPORTANT)
     spotifyLinked: 0,
     spotifyRefreshToken: null,
     lastChannelId: null,
@@ -33,7 +32,7 @@ function createDefaultUser() {
 }
 
 // =============================
-// TABLE (FULL SAFE SCHEMA)
+// TABLE (FINAL SAFE SCHEMA)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -58,11 +57,11 @@ CREATE TABLE IF NOT EXISTS users (
 `).run();
 
 // =============================
-// SAFE PARSE
+// SAFE JSON PARSE
 // =============================
 function safeParse(v, fallback = {}) {
   try {
-    if (!v || v === "null" || v === "undefined" || v === "") return fallback;
+    if (!v) return fallback;
     return JSON.parse(v);
   } catch {
     return fallback;
@@ -70,7 +69,7 @@ function safeParse(v, fallback = {}) {
 }
 
 // =============================
-// NORMALIZE (ROBUST)
+// NORMALIZE
 // =============================
 function normalize(raw) {
   const streaks = safeParse(raw.streaks);
@@ -91,10 +90,9 @@ function normalize(raw) {
       monthly: { count: 0, last: 0, ...(streaks.monthly || {}) }
     },
 
-    started: Number(raw.started) === 1 ? 1 : 0,
+    started: raw.started ? 1 : 0,
 
-    // 🔥 SPOTIFY FIELDS
-    spotifyLinked: Number(raw.spotifyLinked) === 1 ? 1 : 0,
+    spotifyLinked: raw.spotifyLinked ? 1 : 0,
     spotifyRefreshToken: raw.spotifyRefreshToken || null,
     lastChannelId: raw.lastChannelId || null,
 
