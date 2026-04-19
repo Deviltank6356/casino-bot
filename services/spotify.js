@@ -1,8 +1,5 @@
-const express = require("express");
 const SpotifyWebApi = require("spotify-web-api-node");
 const config = require("../config.json");
-
-const app = express();
 
 const spotify = new SpotifyWebApi({
   clientId: config.spotify.clientId,
@@ -12,57 +9,45 @@ const spotify = new SpotifyWebApi({
 
 let lastRefresh = 0;
 
-// =============================
-// REFRESH TOKEN SAFE
-// =============================
 async function refreshToken() {
   try {
+    if (!config.spotify.refreshToken) return;
+
     const now = Date.now();
     if (now - lastRefresh < 300000) return;
 
     const data = await spotify.refreshAccessToken();
+
     spotify.setAccessToken(data.body.access_token);
 
     lastRefresh = now;
+
   } catch (err) {
-    console.error("Spotify refresh error:", err?.body || err.message || err);
+    console.error("Spotify refresh error:", err?.body || err.message);
   }
 }
 
-// =============================
-// API ROUTE
-// =============================
-app.get("/now-playing", async (req, res) => {
+async function getNowPlaying() {
   try {
     await refreshToken();
 
-    const data = await spotify.getMyCurrentPlayingTrack();
+    const res = await spotify.getMyCurrentPlayingTrack();
 
-    if (!data?.body?.item) {
-      return res.json({ playing: false });
-    }
+    if (!res.body?.item) return null;
 
-    const track = data.body.item;
+    const t = res.body.item;
 
-    return res.json({
-      playing: data.body.is_playing,
-      name: track.name,
-      artist: track.artists.map(a => a.name).join(", "),
-      url: track.external_urls.spotify
-    });
+    return {
+      name: t.name,
+      artist: t.artists.map(a => a.name).join(", "),
+      url: t.external_urls.spotify,
+      isPlaying: res.body.is_playing
+    };
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Spotify failed" });
+    console.error("Spotify error:", err?.body || err.message);
+    return null;
   }
-});
+}
 
-// =============================
-// START SERVER (THIS WAS MISSING)
-// =============================
-app.listen(3000, "0.0.0.0", () => {
-  console.log("🎧 Spotify server running on port 3000");
-app.get("/", (req, res) => {
-  res.send("🎧 Spotify API is running ✔");
-});
-});
+module.exports = { getNowPlaying };
