@@ -11,29 +11,29 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // 🔒 HARD BLOCK: already started
+      // 🔒 HARD BLOCK (ONLY RELIABLE CHECK)
       if (Number(user.started) === 1) {
         return interaction.reply({
-          content: "❌ You already started!",
+          content: "❌ You have already run /start",
           ephemeral: true
         });
       }
 
-      // 🎯 INITIALISE USER (ONLY ONCE EVER)
+      // 💰 GIVE STARTING REWARD ONLY ONCE
       user.money = config.startingMoney ?? 1000;
+      user.bank = config.startingBank ?? 500;
       user.xp = config.startingXP ?? 0;
       user.level = config.startingLevel ?? 0;
-      user.bank = config.startingBank ?? 0;
 
-      // 🔒 PERMANENT FLAG
+      // 🔒 LOCK USER FOREVER
       user.started = 1;
 
-      // SAVE TO DB (CRITICAL)
       saveUser(user);
 
       return interaction.reply(
         "🎉 **Welcome to the casino!**\n" +
-        `💰 Starting money: ${user.money}\n` +
+        `💰 Wallet: ${user.money}\n` +
+        `🏦 Bank: ${user.bank}\n` +
         "━━━━━━━━━━━━━━\n" +
         "You can now use:\n" +
         "🎰 /slots\n🎡 /roulette\n🃏 /blackjack\n💰 /balance\n"
