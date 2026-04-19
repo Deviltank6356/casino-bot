@@ -7,9 +7,14 @@ const commands = [];
 const seen = new Set();
 
 // =============================
-// LOAD COMMANDS (DEBUG VERSION)
+// LOAD COMMANDS (HARD DEBUG VERSION)
 // =============================
 function loadCommands(dir) {
+  if (!fs.existsSync(dir)) {
+    console.error(`❌ MISSING DIRECTORY: ${dir}`);
+    return;
+  }
+
   const files = fs.readdirSync(dir);
 
   for (const file of files) {
@@ -20,6 +25,9 @@ function loadCommands(dir) {
     try {
       const stat = fs.lstatSync(fullPath);
 
+      // =============================
+      // RECURSIVE FOLDERS
+      // =============================
       if (stat.isDirectory()) {
         loadCommands(fullPath);
         continue;
@@ -30,18 +38,19 @@ function loadCommands(dir) {
         continue;
       }
 
+      // =============================
+      // LOAD FILE (SHOW REAL ERRORS)
+      // =============================
       delete require.cache[require.resolve(fullPath)];
 
       let command;
       try {
         command = require(fullPath);
-      } catch (e) {
+      } catch (err) {
         console.error(`💥 REQUIRE FAILED: ${fullPath}`);
-        console.error(e);
+        console.error(err.stack || err);
         continue;
       }
-
-      console.log(`📦 LOADED FILE: ${file}`, command);
 
       if (!command) {
         console.warn(`⚠️ EMPTY EXPORT: ${fullPath}`);
@@ -61,20 +70,24 @@ function loadCommands(dir) {
       let json;
       try {
         json = command.data.toJSON();
-      } catch (e) {
-        console.error(`❌ toJSON CRASH: ${fullPath}`, e);
+      } catch (err) {
+        console.error(`❌ toJSON FAILED: ${fullPath}`);
+        console.error(err.stack || err);
         continue;
       }
 
       if (!json?.name) {
-        console.warn(`⚠️ NO NAME: ${fullPath}`);
+        console.warn(`⚠️ NO COMMAND NAME: ${fullPath}`);
         continue;
       }
 
       const name = json.name.toLowerCase().trim();
 
+      // =============================
+      // DUPLICATE CHECK (STRICT)
+      // =============================
       if (seen.has(name)) {
-        console.error(`❌ DUPLICATE: ${name}`);
+        console.error(`❌ DUPLICATE IGNORED: ${name} (${fullPath})`);
         continue;
       }
 
@@ -84,13 +97,17 @@ function loadCommands(dir) {
       console.log(`✅ LOADED COMMAND: ${name}`);
 
     } catch (err) {
-      console.error(`💥 FILE ERROR: ${fullPath}`, err);
+      console.error(`💥 FILE ERROR: ${fullPath}`);
+      console.error(err.stack || err);
     }
   }
 }
 
 // =============================
+// LOAD MULTIPLE ROOTS (IMPORTANT FIX)
+// =============================
 loadCommands(path.join(__dirname, "commands"));
+loadCommands(path.join(__dirname, "utils")); // 🔥 THIS FIXES YOUR ISSUE
 
 // =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
@@ -113,6 +130,7 @@ const rest = new REST({ version: "10" }).setToken(config.token);
     console.log(`✅ DEPLOYED: ${result.length} commands`);
 
   } catch (err) {
-    console.error("❌ DEPLOY FAILED:", err);
+    console.error("❌ DEPLOY FAILED:");
+    console.error(err.stack || err);
   }
 })();
