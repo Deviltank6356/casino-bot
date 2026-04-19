@@ -23,7 +23,7 @@ const DEFAULT_USER = () => ({
 });
 
 // =============================
-// TABLE SETUP (SAFE MIGRATION)
+// TABLE SETUP (ONLY ONCE)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -38,15 +38,6 @@ CREATE TABLE IF NOT EXISTS users (
 )
 `).run();
 
-// 🔥 AUTO-FIX OLD DATABASES (IMPORTANT)
-try {
-  db.prepare(`ALTER TABLE users ADD COLUMN claims TEXT DEFAULT '{}'`).run();
-} catch (_) {}
-
-try {
-  db.prepare(`ALTER TABLE users ADD COLUMN streaks TEXT DEFAULT '{}'`).run();
-} catch (_) {}
-
 // =============================
 // SAFE JSON
 // =============================
@@ -59,32 +50,32 @@ function safeParse(input, fallback = {}) {
 }
 
 // =============================
-// NORMALIZE USER
+// NORMALIZE USER (ROBUST)
 // =============================
-function normalizeUser(user) {
-  const streaks = safeParse(user.streaks, {});
+function normalizeUser(raw) {
+  const streaks = safeParse(raw.streaks, {});
 
   return {
-    id: user.id,
-    money: user.money ?? 0,
-    xp: user.xp ?? 0,
-    level: user.level ?? 0,
-    bank: user.bank ?? 0,
-    claims: safeParse(user.claims, {}),
+    id: raw.id,
+    money: Number(raw.money ?? 0),
+    xp: Number(raw.xp ?? 0),
+    level: Number(raw.level ?? 0),
+    bank: Number(raw.bank ?? 0),
+    claims: safeParse(raw.claims, {}),
     streaks: {
       daily: { ...DEFAULT_STREAKS.daily, ...(streaks.daily || {}) },
       weekly: { ...DEFAULT_STREAKS.weekly, ...(streaks.weekly || {}) },
       monthly: { ...DEFAULT_STREAKS.monthly, ...(streaks.monthly || {}) }
     },
-    joinedAt: user.joinedAt ?? Date.now()
+    joinedAt: raw.joinedAt ?? Date.now()
   };
 }
 
 // =============================
-// GET USER
+// GET USER (AUTO CREATE)
 // =============================
 function getUser(id) {
-  let user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
 
   if (!user) {
     const newUser = { id, ...DEFAULT_USER() };
