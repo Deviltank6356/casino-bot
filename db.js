@@ -3,12 +3,12 @@ const config = require("./config.json");
 const path = require("path");
 
 // =============================
-// DB (ABSOLUTE PATH = SAFE WITH PM2)
+// DB (PM2 SAFE PATH)
 // =============================
 const db = new Database(path.join(__dirname, "casino.db"));
 
 // =============================
-// DEFAULTS
+// DEFAULT DATA
 // =============================
 const DEFAULT_STREAKS = {
   daily: { count: 0, last: 0 },
@@ -16,18 +16,20 @@ const DEFAULT_STREAKS = {
   monthly: { count: 0, last: 0 }
 };
 
-const DEFAULT_USER = () => ({
-  money: config.startingMoney ?? 0,
-  xp: config.startingXP ?? 0,
-  level: config.startingLevel ?? 0,
-  bank: config.startingBank ?? 0,
-  claims: {},
-  streaks: structuredClone(DEFAULT_STREAKS),
-  joinedAt: Date.now()
-});
+function createDefaultUser() {
+  return {
+    money: config.startingMoney ?? 0,
+    xp: config.startingXP ?? 0,
+    level: config.startingLevel ?? 0,
+    bank: config.startingBank ?? 0,
+    claims: {},
+    streaks: structuredClone(DEFAULT_STREAKS),
+    joinedAt: Date.now()
+  };
+}
 
 // =============================
-// TABLE SETUP (SAFE + CONSISTENT)
+// TABLE SETUP
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -43,37 +45,37 @@ CREATE TABLE IF NOT EXISTS users (
 `).run();
 
 // =============================
-// SAFE JSON PARSER (FIXED)
+// SAFE JSON PARSE
 // =============================
-function safeParse(input, fallback = {}) {
+function safeParse(value, fallback = {}) {
+  if (!value || value === "null" || value === "undefined") return fallback;
+
   try {
-    if (input === null || input === undefined) return fallback;
-    if (input === "" || input === "null" || input === "undefined") return fallback;
-    return JSON.parse(String(input));
+    return JSON.parse(String(value));
   } catch {
     return fallback;
   }
 }
 
 // =============================
-// NORMALIZE USER (SAFE CASTING)
+// NORMALIZE USER
 // =============================
 function normalizeUser(raw) {
-  const streaks = safeParse(raw.streaks, {});
+  const streaks = safeParse(raw.streaks);
 
   return {
     id: raw.id,
-    money: Number(raw.money ?? 0),
-    xp: Number(raw.xp ?? 0),
-    level: Number(raw.level ?? 0),
-    bank: Number(raw.bank ?? 0),
-    claims: safeParse(raw.claims, {}),
+    money: Number(raw.money) || 0,
+    xp: Number(raw.xp) || 0,
+    level: Number(raw.level) || 0,
+    bank: Number(raw.bank) || 0,
+    claims: safeParse(raw.claims),
     streaks: {
       daily: { ...DEFAULT_STREAKS.daily, ...(streaks.daily || {}) },
       weekly: { ...DEFAULT_STREAKS.weekly, ...(streaks.weekly || {}) },
       monthly: { ...DEFAULT_STREAKS.monthly, ...(streaks.monthly || {}) }
     },
-    joinedAt: Number(raw.joinedAt ?? Date.now())
+    joinedAt: Number(raw.joinedAt) || Date.now()
   };
 }
 
@@ -81,67 +83,56 @@ function normalizeUser(raw) {
 // GET USER (AUTO CREATE)
 // =============================
 function getUser(id) {
-  try {
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
 
-    if (!user) {
-      const newUser = { id, ...DEFAULT_USER() };
+  if (!row) {
+    const user = createDefaultUser();
 
-      db.prepare(`
-        INSERT INTO users (id, money, xp, level, bank, claims, streaks, joinedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        newUser.money,
-        newUser.xp,
-        newUser.level,
-        newUser.bank,
-        JSON.stringify(newUser.claims),
-        JSON.stringify(newUser.streaks),
-        newUser.joinedAt
-      );
+    db.prepare(`
+      INSERT INTO users (
+        id, money, xp, level, bank, claims, streaks, joinedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      user.money,
+      user.xp,
+      user.level,
+      user.bank,
+      JSON.stringify(user.claims),
+      JSON.stringify(user.streaks),
+      user.joinedAt
+    );
 
-      return newUser;
-    }
-
-    return normalizeUser(user);
-
-  } catch (err) {
-    console.error("🔥 DB getUser error:", err);
-    throw err;
+    return { id, ...user };
   }
+
+  return normalizeUser(row);
 }
 
 // =============================
 // SAVE USER
 // =============================
 function saveUser(user) {
-  try {
-    const u = normalizeUser(user);
+  const u = normalizeUser(user);
 
-    db.prepare(`
-      UPDATE users
-      SET money = ?,
-          xp = ?,
-          level = ?,
-          bank = ?,
-          claims = ?,
-          streaks = ?
-      WHERE id = ?
-    `).run(
-      u.money,
-      u.xp,
-      u.level,
-      u.bank,
-      JSON.stringify(u.claims),
-      JSON.stringify(u.streaks),
-      u.id
-    );
-
-  } catch (err) {
-    console.error("🔥 DB saveUser error:", err);
-    throw err;
-  }
+  db.prepare(`
+    UPDATE users SET
+      money = ?,
+      xp = ?,
+      level = ?,
+      bank = ?,
+      claims = ?,
+      streaks = ?
+    WHERE id = ?
+  `).run(
+    u.money,
+    u.xp,
+    u.level,
+    u.bank,
+    JSON.stringify(u.claims),
+    JSON.stringify(u.streaks),
+    u.id
+  );
 }
 
 module.exports = {
