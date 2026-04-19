@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { REST, Routes } = require("discord.js");
 const config = require("./config.json");
-
+console.log("➡️ FOUND FILE:", fullPath);
 const commands = [];
 const seen = new Set();
 
