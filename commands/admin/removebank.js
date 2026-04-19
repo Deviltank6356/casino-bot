@@ -5,8 +5,8 @@ const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("addbank")
-    .setDescription("Add money to a user's bank")
+    .setName("removebank")
+    .setDescription("Remove money from a user's bank")
     .addUserOption(o =>
       o
         .setName("user")
@@ -38,28 +38,31 @@ module.exports = {
       }
 
       const user = getUser(target.id);
-      user.bank += amount;
+
+      // ✅ SAFE REMOVE (no negative bank)
+      user.bank = Math.max(0, user.bank - amount);
+
       saveUser(user);
 
-      // SAFE LOGGING (never breaks command)
+      // 🔒 SAFE LOGGING
       try {
         await logAdminAction(
           client,
           i,
-          "ADD BANK",
-          `+${amount} bank → ${target.tag} (${target.id})`
+          "REMOVE BANK",
+          `-${amount} bank → ${target.tag} (${target.id})`
         );
       } catch (err) {
         console.error("LOG ERROR:", err);
       }
 
-      return i.reply(`🏦 Added ${amount} to bank`);
+      return i.reply(`🏦 Removed ${amount} from ${target.username}'s bank`);
 
     } catch (err) {
-      console.error("ADDBANK ERROR:", err);
+      console.error("REMOVEBANK ERROR:", err);
 
       return i.reply({
-        content: "❌ Error adding bank money",
+        content: "❌ Error removing bank money",
         ephemeral: true
       });
     }

@@ -5,8 +5,8 @@ const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("addbank")
-    .setDescription("Add money to a user's bank")
+    .setName("addmoney")
+    .setDescription("Add money to a user's wallet")
     .addUserOption(o =>
       o
         .setName("user")
@@ -41,28 +41,31 @@ module.exports = {
       }
 
       const user = getUser(target.id);
-      user.bank += amount;
+
+      // ✅ ADD TO WALLET (NOT BANK)
+      user.money += amount;
+
       saveUser(user);
 
-      // 🔒 SAFE LOGGING (prevents bot crash)
+      // 🔒 SAFE LOGGING
       try {
         await logAdminAction(
           client,
           i,
-          "ADD BANK",
-          `+${amount} bank → ${target.tag} (${target.id})`
+          "ADD MONEY",
+          `+${amount} wallet → ${target.tag} (${target.id})`
         );
       } catch (err) {
         console.error("LOG ERROR:", err);
       }
 
-      return i.reply(`🏦 Added ${amount} to bank`);
+      return i.reply(`💰 Added ${amount} to ${target.username}'s wallet`);
 
     } catch (err) {
-      console.error("ADDBANK ERROR:", err);
+      console.error("ADDMONEY ERROR:", err);
 
       return i.reply({
-        content: "❌ Error adding bank money",
+        content: "❌ Error adding money",
         ephemeral: true
       });
     }

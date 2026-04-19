@@ -7,9 +7,22 @@ const spotify = new SpotifyWebApi({
   refreshToken: config.spotify.refreshToken
 });
 
+let lastRefresh = 0;
+
 async function refreshToken() {
-  const data = await spotify.refreshAccessToken();
-  spotify.setAccessToken(data.body.access_token);
+  try {
+    const now = Date.now();
+
+    // prevent spam refreshing (important stability fix)
+    if (now - lastRefresh < 300000) return;
+
+    const data = await spotify.refreshAccessToken();
+    spotify.setAccessToken(data.body.access_token);
+
+    lastRefresh = now;
+  } catch (err) {
+    console.error("Spotify refresh error:", err?.body || err.message || err);
+  }
 }
 
 async function getNowPlaying() {
@@ -18,11 +31,8 @@ async function getNowPlaying() {
 
     const res = await spotify.getMyCurrentPlayingTrack();
 
-    if (!res.body || !res.body.item) {
-      return {
-        isPlaying: false,
-        text: "Nothing currently playing"
-      };
+    if (!res?.body?.item) {
+      return null; // cleaner handling
     }
 
     const track = res.body.item;
@@ -33,13 +43,10 @@ async function getNowPlaying() {
       artist: track.artists.map(a => a.name).join(", "),
       url: track.external_urls.spotify
     };
-
   } catch (err) {
     console.error("Spotify error:", err?.body || err.message || err);
-    return {
-      isPlaying: false,
-      text: "Spotify API error"
-    };
+
+    return null;
   }
 }
 

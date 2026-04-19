@@ -2,28 +2,20 @@ const {
   SlashCommandBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  EmbedBuilder
 } = require("discord.js");
 
 const manager = require("../../games/blackjackManager");
 const { getUser } = require("../../db");
-
-function format(game) {
-  return (
-    `🃏 **BLACKJACK VS DEALER**\n` +
-    `━━━━━━━━━━━━━━\n` +
-    `🧑 You: ${game.player}\n` +
-    `🎩 Dealer: ${game.dealer}\n` +
-    `💰 Bet: ${game.bet}\n`
-  );
-}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("blackjack")
     .setDescription("Play blackjack vs dealer")
     .addIntegerOption(o =>
-      o.setName("bet")
+      o
+        .setName("bet")
         .setDescription("Amount to bet")
         .setRequired(true)
     ),
@@ -34,14 +26,43 @@ module.exports = {
       const user = getUser(interaction.user.id);
 
       if (!user) {
-        return interaction.reply({ content: "❌ User not found", ephemeral: true });
+        return interaction.reply({
+          content: "❌ User not found",
+          ephemeral: true
+        });
       }
 
       if (user.money < bet) {
-        return interaction.reply({ content: "❌ Not enough money", ephemeral: true });
+        return interaction.reply({
+          content: "❌ Not enough money",
+          ephemeral: true
+        });
       }
 
       const game = manager.start(interaction.user.id, bet);
+
+      const embed = new EmbedBuilder()
+        .setTitle("🃏 Blackjack vs Dealer")
+        .setColor(0x2b2d31)
+        .addFields(
+          {
+            name: "🧑 You",
+            value: String(game.player),
+            inline: true
+          },
+          {
+            name: "🎩 Dealer",
+            value: String(game.dealer),
+            inline: true
+          },
+          {
+            name: "💰 Bet",
+            value: `${game.bet}`,
+            inline: false
+          }
+        )
+        .setFooter({ text: "Hit or Stand wisely..." })
+        .setTimestamp();
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -56,14 +77,14 @@ module.exports = {
       );
 
       return interaction.reply({
-        content: format(game),
+        embeds: [embed],
         components: [row]
       });
 
     } catch (err) {
       console.error("BLACKJACK ERROR:", err);
 
-      if (!interaction.replied) {
+      if (!interaction.replied && !interaction.deferred) {
         return interaction.reply({
           content: "❌ Command failed",
           ephemeral: true

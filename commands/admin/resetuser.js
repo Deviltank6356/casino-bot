@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
 const config = require("../../config.json");
 const { getUser, saveUser } = require("../../db");
 const { logAdminAction } = require("../../services/adminLogger");
@@ -16,15 +16,16 @@ module.exports = {
 
   async execute(interaction, client) {
     try {
-      // Permission check
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      // 🔒 OWNER ONLY CHECK (FIXED)
+      if (interaction.user.id !== config.ownerId) {
         return interaction.reply({
-          content: "❌ No permission",
+          content: "❌ Only the bot owner can use this command.",
           ephemeral: true
         });
       }
 
       const target = interaction.options.getUser("user");
+
       if (!target) {
         return interaction.reply({
           content: "❌ User not found",
@@ -42,21 +43,24 @@ module.exports = {
 
       saveUser(user);
 
-      // Safe logging (won’t break command if logger fails)
-      await logAdminAction(
-        client,
-        interaction,
-        "RESET USER",
-        `Reset ${target.tag} (${target.id})`
-      ).catch(err => console.error("LOG ERROR:", err));
+      // Safe logging (won’t break command)
+      try {
+        await logAdminAction(
+          client,
+          interaction,
+          "RESET USER",
+          `Reset ${target.tag} (${target.id})`
+        );
+      } catch (err) {
+        console.error("LOG ERROR:", err);
+      }
 
       return interaction.reply(`🧨 Reset **${target.username}**'s data`);
 
     } catch (err) {
       console.error("RESETUSER ERROR:", err);
 
-      // fallback response (prevents "application did not respond")
-      if (!interaction.replied) {
+      if (!interaction.replied && !interaction.deferred) {
         return interaction.reply({
           content: "❌ Error resetting user",
           ephemeral: true

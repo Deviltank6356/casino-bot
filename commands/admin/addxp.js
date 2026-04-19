@@ -5,8 +5,8 @@ const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("addbank")
-    .setDescription("Add money to a user's bank")
+    .setName("addxp")
+    .setDescription("Add XP to a user")
     .addUserOption(o =>
       o
         .setName("user")
@@ -16,7 +16,7 @@ module.exports = {
     .addIntegerOption(o =>
       o
         .setName("amount")
-        .setDescription("Amount")
+        .setDescription("XP amount")
         .setRequired(true)
     ),
 
@@ -34,32 +34,38 @@ module.exports = {
       }
 
       if (!amount || amount <= 0) {
-        return i.reply({ content: "❌ Invalid amount", ephemeral: true });
+        return i.reply({
+          content: "❌ Invalid amount",
+          ephemeral: true
+        });
       }
 
       const user = getUser(target.id);
-      user.bank += amount;
+
+      // ✅ ADD XP
+      user.xp += amount;
+
       saveUser(user);
 
-      // SAFE LOGGING (won't break command)
+      // 🔒 SAFE LOGGING
       try {
         await logAdminAction(
           client,
           i,
-          "ADD BANK",
-          `+${amount} bank → ${target.tag} (${target.id})`
+          "ADD XP",
+          `+${amount} XP → ${target.tag} (${target.id})`
         );
       } catch (err) {
         console.error("LOG ERROR:", err);
       }
 
-      return i.reply(`🏦 Added ${amount} to bank`);
+      return i.reply(`⭐ Added ${amount} XP to ${target.username}`);
 
     } catch (err) {
-      console.error("ADDBANK ERROR:", err);
+      console.error("ADDXP ERROR:", err);
 
       return i.reply({
-        content: "❌ Error adding bank money",
+        content: "❌ Error adding XP",
         ephemeral: true
       });
     }
