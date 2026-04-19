@@ -1,53 +1,70 @@
 const { SlashCommandBuilder } = require("discord.js");
-const isAdmin = require("../../utils/isAdmin");
-const xp = require("../../systems/multipliers/xpMultiplier");
+const config = require("../../config.json");
+const { db } = require("../../db");
 const { logAdminAction } = require("../../services/adminLogger");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("removexpboost")
-    .setDescription("Remove an active XP multiplier boost")
-    .addNumberOption(o =>
+    .setName("resetallusers")
+    .setDescription("⚠️ OWNER ONLY: Reset ALL user data")
+    .addStringOption(o =>
       o
-        .setName("multiplier")
-        .setDescription("XP multiplier (e.g. 2 = 2x)")
+        .setName("confirm")
+        .setDescription('Type "YES" to confirm wipe')
         .setRequired(true)
     ),
 
-  async execute(i, client) {
+  async execute(interaction, client) {
     try {
-      if (!isAdmin(i.user.id)) {
-        return i.reply({ content: "No permission", ephemeral: true });
-      }
-
-      const mult = i.options.getNumber("multiplier");
-
-      if (!mult || mult <= 0) {
-        return i.reply({
-          content: "❌ Invalid multiplier",
+      // =========================
+      // OWNER CHECK
+      // =========================
+      if (interaction.user.id !== config.ownerId) {
+        return interaction.reply({
+          content: "❌ Only the bot owner can use this command.",
           ephemeral: true
         });
       }
 
-      xp.removeMultiplier(mult);
+      const confirm = interaction.options.getString("confirm");
 
-      // safe logging (prevents crash)
-      await logAdminAction(
-        client,
-        i,
-        "REMOVE XP BOOST",
-        `Removed ${mult}x XP boost`
-      ).catch(err => console.error("LOG ERROR:", err));
+      if (confirm !== "YES") {
+        return interaction.reply({
+          content: "⚠️ You must type YES to confirm.",
+          ephemeral: true
+        });
+      }
 
-      return i.reply(`❌ Removed ${mult}x XP boost`);
+      // =========================
+      // RESET DATABASE
+      // =========================
+      db.prepare("DELETE FROM users").run();
+
+      // =========================
+      // LOG (safe)
+      // =========================
+      try {
+        await logAdminAction(
+          client,
+          interaction,
+          "RESET ALL USERS",
+          `All user data wiped by owner (${interaction.user.tag})`
+        );
+      } catch (err) {
+        console.error("LOG ERROR:", err);
+      }
+
+      return interaction.reply("💥 All user data has been reset by the owner.");
 
     } catch (err) {
-      console.error("REMOVEXPBOOST ERROR:", err);
+      console.error("RESETALLUSERS ERROR:", err);
 
-      return i.reply({
-        content: "❌ Error removing XP boost",
-        ephemeral: true
-      });
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Failed to reset users.",
+          ephemeral: true
+        });
+      }
     }
   }
 };
