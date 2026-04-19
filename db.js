@@ -13,6 +13,7 @@ function createDefaultUser() {
     xp: config.startingXP ?? 0,
     level: config.startingLevel ?? 0,
     bank: config.startingBank ?? 0,
+
     claims: {},
     streaks: {
       daily: { count: 0, last: 0 },
@@ -26,7 +27,7 @@ function createDefaultUser() {
 }
 
 // =============================
-// TABLE
+// TABLE (SAFE)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -39,32 +40,40 @@ CREATE TABLE IF NOT EXISTS users (
   streaks TEXT DEFAULT '{}',
   started INTEGER DEFAULT 0,
   joinedAt INTEGER
-)
+);
 `).run();
 
+// 🔥 FIX: auto-migrate missing column (IMPORTANT)
+try {
+  db.prepare(`ALTER TABLE users ADD COLUMN started INTEGER DEFAULT 0`).run();
+} catch (_) {}
+
 // =============================
-// SAFE PARSE
+// SAFE PARSE (ROBUST)
 // =============================
 function safeParse(v, fallback = {}) {
   try {
-    return v ? JSON.parse(v) : fallback;
+    if (!v || v === "null" || v === "undefined" || v === "") return fallback;
+    return JSON.parse(v);
   } catch {
     return fallback;
   }
 }
 
 // =============================
-// NORMALIZE (CRITICAL FIX)
+// NORMALIZE (FIXED)
 // =============================
 function normalize(raw) {
   const streaks = safeParse(raw.streaks);
 
   return {
     id: raw.id,
+
     money: Number(raw.money) || 0,
     xp: Number(raw.xp) || 0,
     level: Number(raw.level) || 0,
     bank: Number(raw.bank) || 0,
+
     claims: safeParse(raw.claims),
 
     streaks: {
@@ -73,7 +82,7 @@ function normalize(raw) {
       monthly: { count: 0, last: 0, ...(streaks.monthly || {}) }
     },
 
-    // 🔥 FORCE BOOLEAN SAFETY
+    // 🔥 HARD LOCK
     started: raw.started === 1 ? 1 : 0,
 
     joinedAt: Number(raw.joinedAt) || Date.now()
@@ -81,7 +90,7 @@ function normalize(raw) {
 }
 
 // =============================
-// GET USER (FIXED)
+// GET USER
 // =============================
 function getUser(id) {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
@@ -113,7 +122,7 @@ function getUser(id) {
 }
 
 // =============================
-// SAVE USER (FORCES DB CONSISTENCY)
+// SAVE USER (SAFE + CONSISTENT)
 // =============================
 function saveUser(user) {
   const u = normalize(user);
