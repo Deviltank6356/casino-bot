@@ -2,24 +2,29 @@ const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { getUser, saveUser } = require("../../db");
 
 // =============================
-// RARITY SYSTEM
+// SYMBOL SYSTEM
 // =============================
 const symbols = [
   { emoji: "🍒", weight: 45, multiplier: 2 },
   { emoji: "🔔", weight: 30, multiplier: 1.5 },
   { emoji: "7️⃣", weight: 20, multiplier: 3 },
-  { emoji: "💎", weight: 5, multiplier: 5 } // VERY RARE
+  { emoji: "💎", weight: 5, multiplier: 5 }
 ];
 
 // =============================
+// SAFE WEIGHTED ROLL
+// =============================
 function roll() {
-  const total = symbols.reduce((a, b) => a + b.weight, 0);
+  const total = symbols.reduce((sum, s) => sum + s.weight, 0);
   let rand = Math.floor(Math.random() * total);
 
   for (const s of symbols) {
     if (rand < s.weight) return s;
     rand -= s.weight;
   }
+
+  // fallback (prevents undefined crash)
+  return symbols[0];
 }
 
 // =============================
@@ -27,13 +32,15 @@ function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
 
+// =============================
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("slots")
-    .setDescription("🎰 Casino slots with rarities")
+    .setDescription("🎰 Casino slots")
     .addIntegerOption(o =>
-      o.setName("bet")
-        .setDescription("Your bet")
+      o
+        .setName("bet")
+        .setDescription("Your bet amount")
         .setRequired(true)
     ),
 
@@ -42,6 +49,9 @@ module.exports = {
       const bet = interaction.options.getInteger("bet");
       const user = getUser(interaction.user.id);
 
+      // =============================
+      // VALIDATION
+      // =============================
       if (!user) {
         return interaction.reply({
           content: "❌ User not found",
@@ -49,25 +59,27 @@ module.exports = {
         });
       }
 
-      if (bet <= 0) {
+      if (!bet || isNaN(bet) || bet <= 0) {
         return interaction.reply({
-          content: "❌ Invalid bet",
+          content: "❌ Invalid bet amount",
           ephemeral: true
         });
       }
 
-      if (user.money < bet) {
+      if ((user.money || 0) < bet) {
         return interaction.reply({
           content: "❌ Not enough money",
           ephemeral: true
         });
       }
 
-      await interaction.reply("🎰 Spinning...");
+      await interaction.reply("🎰 Spinning the slots...");
 
       let a, b, c;
 
-      // animation
+      // =============================
+      // ANIMATION
+      // =============================
       for (let i = 0; i < 6; i++) {
         a = roll().emoji;
         b = roll().emoji;
@@ -84,7 +96,7 @@ module.exports = {
       }
 
       // =============================
-      // WIN CHECK (3 MATCH ONLY)
+      // WIN CHECK
       // =============================
       let win = false;
       let multiplier = 0;
@@ -92,21 +104,18 @@ module.exports = {
       if (a === b && b === c) {
         const symbol = symbols.find(s => s.emoji === a);
         win = true;
-        multiplier = symbol.multiplier;
+        multiplier = symbol?.multiplier || 1;
       }
 
-      let change = 0;
+      const change = win ? bet * multiplier : -bet;
 
-      if (win) {
-        change = bet * multiplier;
-        user.money += change;
-      } else {
-        change = -bet;
-        user.money -= bet;
-      }
+      user.money = (user.money || 0) + change;
 
       saveUser(user);
 
+      // =============================
+      // RESULT EMBED
+      // =============================
       const embed = new EmbedBuilder()
         .setTitle("🎰 Slots")
         .setColor(win ? 0x00ff00 : 0xff0000)
@@ -140,9 +149,9 @@ module.exports = {
     } catch (err) {
       console.error("SLOTS ERROR:", err);
 
-      if (!interaction.replied && !interaction.deferred) {
+      if (!interaction.replied) {
         return interaction.reply({
-          content: "❌ Command failed",
+          content: "❌ Slots crashed safely",
           ephemeral: true
         });
       }

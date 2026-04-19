@@ -14,8 +14,7 @@ module.exports = {
     .setName("blackjack")
     .setDescription("Play blackjack vs dealer")
     .addIntegerOption(o =>
-      o
-        .setName("bet")
+      o.setName("bet")
         .setDescription("Amount to bet")
         .setRequired(true)
     ),
@@ -26,20 +25,22 @@ module.exports = {
       const user = getUser(interaction.user.id);
 
       if (!user) {
-        return interaction.reply({
-          content: "❌ User not found",
-          ephemeral: true
-        });
+        return interaction.reply({ content: "❌ User not found", ephemeral: true });
       }
 
-      if (user.money < bet) {
-        return interaction.reply({
-          content: "❌ Not enough money",
-          ephemeral: true
-        });
+      if (!bet || bet <= 0 || isNaN(bet)) {
+        return interaction.reply({ content: "❌ Invalid bet", ephemeral: true });
+      }
+
+      if (!user.money || user.money < bet) {
+        return interaction.reply({ content: "❌ Not enough money", ephemeral: true });
       }
 
       const game = manager.start(interaction.user.id, bet);
+
+      if (!game) {
+        return interaction.reply({ content: "❌ Game failed to start", ephemeral: true });
+      }
 
       const embed = new EmbedBuilder()
         .setTitle("🃏 Blackjack vs Dealer")
@@ -47,22 +48,20 @@ module.exports = {
         .addFields(
           {
             name: "🧑 You",
-            value: String(game.player),
+            value: Array.isArray(game.player) ? game.player.join(", ") : String(game.player || "N/A"),
             inline: true
           },
           {
             name: "🎩 Dealer",
-            value: String(game.dealer),
+            value: Array.isArray(game.dealer) ? game.dealer.join(", ") : String(game.dealer || "N/A"),
             inline: true
           },
           {
             name: "💰 Bet",
-            value: `${game.bet}`,
+            value: `${bet}`,
             inline: false
           }
-        )
-        .setFooter({ text: "Hit or Stand wisely..." })
-        .setTimestamp();
+        );
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -76,20 +75,15 @@ module.exports = {
           .setStyle(ButtonStyle.Danger)
       );
 
-      return interaction.reply({
-        embeds: [embed],
-        components: [row]
-      });
+      return interaction.reply({ embeds: [embed], components: [row] });
 
     } catch (err) {
       console.error("BLACKJACK ERROR:", err);
 
-      if (!interaction.replied && !interaction.deferred) {
-        return interaction.reply({
-          content: "❌ Command failed",
-          ephemeral: true
-        });
-      }
+      return interaction.reply({
+        content: "❌ Command failed safely",
+        ephemeral: true
+      });
     }
   }
 };

@@ -1,18 +1,25 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { nowPlaying } = require("../../services/spotify");
+const { getNowPlaying } = require("../../services/spotify");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("nowplaying")
-    .setDescription("Show what you're listening to on Spotify"),
+    .setDescription("Show Spotify current track"),
 
   async execute(i) {
     try {
-      const track = await nowPlaying();
+      const track = await getNowPlaying();
 
-      if (!track || track.error) {
+      if (!track) {
         return i.reply({
-          content: "❌ Spotify is not connected or not configured correctly.",
+          content: "❌ Spotify not available.",
+          ephemeral: true
+        });
+      }
+
+      if (!track.isPlaying) {
+        return i.reply({
+          content: "🎧 Nothing is currently playing.",
           ephemeral: true
         });
       }
@@ -22,15 +29,14 @@ module.exports = {
           `🎧 **Now Playing**\n` +
           `🎵 ${track.name}\n` +
           `👤 ${track.artist}\n` +
-          `🔗 ${track.url}\n` +
-          `▶️ ${track.isPlaying ? "Playing" : "Paused"}`
+          `🔗 ${track.url}`
       });
 
     } catch (err) {
       console.error("Spotify error:", err);
 
       return i.reply({
-        content: "❌ Spotify system error.",
+        content: "❌ Spotify system error",
         ephemeral: true
       });
     }
