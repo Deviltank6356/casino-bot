@@ -17,37 +17,67 @@ module.exports = {
 
       const track = await getUserSpotify(target.id);
 
-      // ❌ not linked OR service error
-      if (!track || track.status === "not_linked") {
+      // =============================
+      // NOT LINKED / INVALID RESPONSE
+      // =============================
+      if (!track) {
         return i.reply({
           content: `❌ ${target.username} has not linked Spotify.`,
           flags: 64
         });
       }
 
-      if (track.status === "error") {
+      // =============================
+      // NORMALISE OLD + NEW FORMAT
+      // =============================
+      const status = track.status || "ok";
+
+      // error
+      if (status === "error") {
         return i.reply({
           content: `❌ Couldn't fetch Spotify data for ${target.username}.`,
           flags: 64
         });
       }
 
-      // 🎧 nothing playing
-      if (track.status === "none") {
+      // none playing
+      if (status === "none") {
         return i.reply({
           content: `🎧 ${target.username} is not listening to anything.`,
           flags: 64
         });
       }
 
-      // ✅ playing
+      // =============================
+      // SUPPORT BOTH FORMATS:
+      // OLD: track.item
+      // NEW: track.name
+      // =============================
+      const item = track.item || track;
+
+      const name = item.name || "Unknown";
+      const artist =
+        item.artists?.map(a => a.name).join(", ") ||
+        track.artist ||
+        "Unknown";
+
+      const url =
+        item.external_urls?.spotify ||
+        track.url ||
+        null;
+
+      const isPlaying =
+        track.is_playing ??
+        track.isPlaying ??
+        false;
+
       return i.reply({
         content:
           `🎧 **${target.username} is listening to:**\n` +
-          `🎵 ${track.name}\n` +
-          `👤 ${track.artist}\n` +
-          `🔗 ${track.url || "No link"}\n` +
-          `${track.isPlaying ? "🟢 Live" : "⏸️ Paused"}`,
+          `🎵 ${name}\n` +
+          `👤 ${artist}\n` +
+          `🔗 ${url || "No link"}\n` +
+          `${isPlaying ? "🟢 Live" : "⏸️ Paused"}`,
         flags: 64
       });
 

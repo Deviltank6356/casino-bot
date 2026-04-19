@@ -32,7 +32,7 @@ function createDefaultUser() {
 }
 
 // =============================
-// TABLE (FINAL SAFE SCHEMA)
+// TABLE
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS users (
 `).run();
 
 // =============================
-// SAFE JSON PARSE
+// SAFE PARSE
 // =============================
 function safeParse(v, fallback = {}) {
   try {
@@ -69,7 +69,7 @@ function safeParse(v, fallback = {}) {
 }
 
 // =============================
-// NORMALIZE
+// NORMALIZE (FIXED)
 // =============================
 function normalize(raw) {
   const streaks = safeParse(raw.streaks);
@@ -90,11 +90,13 @@ function normalize(raw) {
       monthly: { count: 0, last: 0, ...(streaks.monthly || {}) }
     },
 
-    started: raw.started ? 1 : 0,
+    started: raw.started === 1 ? 1 : 0,
 
-    spotifyLinked: raw.spotifyLinked ? 1 : 0,
-    spotifyRefreshToken: raw.spotifyRefreshToken || null,
-    lastChannelId: raw.lastChannelId || null,
+    // 🔥 FIX: STRICT CHECK (prevents false negatives)
+    spotifyLinked: raw.spotifyLinked === 1 ? 1 : 0,
+
+    spotifyRefreshToken: raw.spotifyRefreshToken ?? null,
+    lastChannelId: raw.lastChannelId ?? null,
 
     joinedAt: Number(raw.joinedAt) || Date.now()
   };
