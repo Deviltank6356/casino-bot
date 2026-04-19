@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { REST, Routes } = require("discord.js");
 const config = require("./config.json");
-console.log("➡️ FOUND FILE:", fullPath);
+
 const commands = [];
 const seen = new Set();
 
@@ -29,6 +29,7 @@ function loadCommands(dir) {
       // RECURSIVE FOLDERS
       // =============================
       if (stat.isDirectory()) {
+        console.log(`📁 Entering folder: ${fullPath}`);
         loadCommands(fullPath);
         continue;
       }
@@ -39,7 +40,7 @@ function loadCommands(dir) {
       }
 
       // =============================
-      // LOAD FILE (SHOW REAL ERRORS)
+      // LOAD FILE
       // =============================
       delete require.cache[require.resolve(fullPath)];
 
@@ -52,12 +53,9 @@ function loadCommands(dir) {
         continue;
       }
 
-      if (!command) {
-        console.warn(`⚠️ EMPTY EXPORT: ${fullPath}`);
-        continue;
-      }
+      console.log(`📦 LOADED FILE: ${fullPath}`);
 
-      if (!command.data) {
+      if (!command?.data) {
         console.warn(`⚠️ NO DATA EXPORT: ${fullPath}`);
         continue;
       }
@@ -83,11 +81,8 @@ function loadCommands(dir) {
 
       const name = json.name.toLowerCase().trim();
 
-      // =============================
-      // DUPLICATE CHECK (STRICT)
-      // =============================
       if (seen.has(name)) {
-        console.error(`❌ DUPLICATE IGNORED: ${name} (${fullPath})`);
+        console.error(`❌ DUPLICATE IGNORED: ${name}`);
         continue;
       }
 
@@ -104,10 +99,10 @@ function loadCommands(dir) {
 }
 
 // =============================
-// LOAD MULTIPLE ROOTS (IMPORTANT FIX)
+// LOAD FOLDERS
 // =============================
 loadCommands(path.join(__dirname, "commands"));
-loadCommands(path.join(__dirname, "utils")); // 🔥 THIS FIXES YOUR ISSUE
+loadCommands(path.join(__dirname, "utils"));
 
 // =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
@@ -118,7 +113,7 @@ const rest = new REST({ version: "10" }).setToken(config.token);
     console.log(`🚀 FINAL COMMAND COUNT: ${commands.length}`);
 
     if (commands.length === 0) {
-      console.error("❌ NO COMMANDS LOADED — CHECK FILE STRUCTURE");
+      console.error("❌ NO COMMANDS LOADED — CHECK STRUCTURE");
       return;
     }
 
