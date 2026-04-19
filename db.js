@@ -68,9 +68,6 @@ function safeParse(v, fallback = {}) {
   }
 }
 
-// =============================
-// NORMALIZE (FIXED)
-// =============================
 function normalize(raw) {
   const streaks = safeParse(raw.streaks);
 

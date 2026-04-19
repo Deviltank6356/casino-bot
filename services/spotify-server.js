@@ -8,39 +8,23 @@ const app = express();
 const CONFIG_PATH = path.join(__dirname, "../config.json");
 
 // =============================
-// SAFE CONFIG LOADER (CRASH PROOF)
+// CONFIG LOADER
 // =============================
 function loadConfig() {
   try {
     return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
   } catch (err) {
-    console.error("❌ Config read error:", err.message);
-    return {
-      spotify: {
-        clientId: "",
-        clientSecret: "",
-        redirectUri: "",
-        baseUrl: ""
-      }
-    };
+    console.error("Config error:", err.message);
+    return { spotify: {} };
   }
 }
 
 // =============================
-// SAFE CONFIG WRITER (NO FIELD LOSS)
+// SPOTIFY CLIENT FACTORY
 // =============================
-function saveConfig(updateFn) {
-  const cfg = loadConfig();
+function createSpotify() {
+  const config = loadConfig();
 
-  const updated = updateFn(cfg);
-
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2));
-}
-
-// =============================
-// CREATE SPOTIFY CLIENT
-// =============================
-function createSpotify(config) {
   return new SpotifyWebApi({
     clientId: config.spotify.clientId,
     clientSecret: config.spotify.clientSecret,
@@ -49,17 +33,27 @@ function createSpotify(config) {
 }
 
 // =============================
-// LOGIN ROUTE
+// ONLY SAVE REFRESH TOKEN
+// =============================
+function saveRefreshToken(refreshToken) {
+  const cfg = loadConfig();
+
+  cfg.spotify = {
+    ...cfg.spotify,
+    refreshToken
+  };
+
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
+// =============================
+// LOGIN
 // =============================
 app.get("/login", (req, res) => {
-  const config = loadConfig();
-  const spotify = createSpotify(config);
+  const spotify = createSpotify();
 
   const userId = req.query.user;
-
-  if (!userId) {
-    return res.status(400).send("Missing Discord user ID");
-  }
+  if (!userId) return res.status(400).send("Missing user ID");
 
   const scopes = [
     "user-read-currently-playing",
@@ -73,76 +67,40 @@ app.get("/login", (req, res) => {
 });
 
 // =============================
-// CALLBACK ROUTE
+// CALLBACK
 // =============================
 app.get("/callback", async (req, res) => {
   try {
-    const config = loadConfig();
-    const spotify = createSpotify(config);
+    const spotify = createSpotify();
 
     const { code, state } = req.query;
 
-    if (!code || !state) {
-      return res.status(400).send("Missing code or state");
-    }
+    if (!code) return res.status(400).send("Missing code");
 
     const data = await spotify.authorizationCodeGrant(code);
 
     const accessToken = data.body.access_token;
     const refreshToken = data.body.refresh_token;
 
-    if (!refreshToken || !accessToken) {
-      return res.status(500).send("Invalid Spotify response");
-    }
-
     spotify.setAccessToken(accessToken);
+    spotify.setRefreshToken(refreshToken);
 
-    // optional sanity check
-    await spotify.getMe().catch(() => null);
+    // store ONLY refresh token
+    saveRefreshToken(refreshToken);
 
-    // =============================
-    // SAFE UPDATE (ONLY spotify.refreshToken)
-    // DOES NOT TOUCH baseUrl OR ANY OTHER FIELD
-    // =============================
-    saveConfig(cfg => ({
-      ...cfg,
-      spotify: {
-        ...cfg.spotify,
-        refreshToken
-      }
-    }));
+    console.log(`✅ Spotify linked: ${state}`);
 
-    console.log(`✅ Spotify linked for user: ${state}`);
-
-    res.send("Spotify linked successfully ✔ You can close this tab.");
-
+    res.send("Spotify connected ✔ You can close this tab.");
   } catch (err) {
-    console.error("❌ Spotify auth error:", {
-      message: err?.message,
-      body: err?.body,
-      status: err?.statusCode
-    });
-
+    console.error("Auth error:", err?.body || err.message || err);
     res.status(500).send("Auth failed");
   }
 });
 
 // =============================
-// HEALTH CHECK
-// =============================
-app.get("/", (req, res) => {
-  res.send("Spotify auth server running ✔");
-});
-
-// =============================
-// START SERVER
-// =============================
 app.listen(3000, "0.0.0.0", () => {
-  console.log("🚀 Spotify auth running");
-
   const config = loadConfig();
 
-  console.log(
-    `Login URL: ${config.spotify.baseUrl}/login?user=DISCORD_USER_ID`
-  );
+  console.log("🚀 Spotify server running");
+  console.log(`Login: ${config.spotify.baseUrl}/login?user=DISCORD_ID`);
 });
