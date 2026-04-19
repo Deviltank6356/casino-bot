@@ -62,4 +62,7 @@ app.get("/now-playing", async (req, res) => {
 // =============================
 app.listen(3000, "0.0.0.0", () => {
   console.log("🎧 Spotify server running on port 3000");
+app.get("/", (req, res) => {
+  res.send("🎧 Spotify API is running ✔");
+});
 });
