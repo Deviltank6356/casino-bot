@@ -1,26 +1,25 @@
 const SpotifyWebApi = require("spotify-web-api-node");
 const config = require("../config.json");
 
+let lastRefresh = 0;
+
+// =============================
+// INIT SPOTIFY CLIENT
+// =============================
 const spotify = new SpotifyWebApi({
   clientId: config.spotify.clientId,
-  clientSecret: config.spotify.clientSecret,
-  refreshToken: config.spotify.refreshToken
+  clientSecret: config.spotify.clientSecret
 });
 
-let lastRefresh = 0;
+// ALWAYS ensure refresh token is applied
+spotify.setRefreshToken(config.spotify.refreshToken);
 
 // =============================
 // DEBUG LOGGER
 // =============================
 function logSpotifyError(err) {
   console.error("❌ SPOTIFY FULL DEBUG:");
-  console.error(JSON.stringify({
-    message: err?.message,
-    body: err?.body,
-    statusCode: err?.statusCode,
-    stack: err?.stack,
-    raw: err
-  }, null, 2));
+  console.dir(err, { depth: 5 });
 }
 
 // =============================
@@ -28,7 +27,9 @@ function logSpotifyError(err) {
 // =============================
 async function refreshToken() {
   try {
-    if (!config.spotify.refreshToken) {
+    const refreshToken = config.spotify.refreshToken;
+
+    if (!refreshToken) {
       console.error("❌ Missing Spotify refresh token in config");
       return false;
     }
@@ -39,12 +40,14 @@ async function refreshToken() {
 
     const data = await spotify.refreshAccessToken();
 
-    if (!data?.body?.access_token) {
-      console.error("❌ Spotify refresh failed: no access token returned");
+    const accessToken = data?.body?.access_token;
+
+    if (!accessToken) {
+      console.error("❌ No access token returned from Spotify");
       return false;
     }
 
-    spotify.setAccessToken(data.body.access_token);
+    spotify.setAccessToken(accessToken);
 
     lastRefresh = now;
 
