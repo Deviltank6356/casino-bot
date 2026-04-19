@@ -11,22 +11,29 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // 🔒 HARD BLOCK (ONLY RELIABLE CHECK)
-      if (Number(user.started) === 1) {
+      // =============================
+      // HARD BLOCK (FINAL SAFE CHECK)
+      // =============================
+      if (user.started === 1) {
         return interaction.reply({
-          content: "❌ You have already run /start",
+          content: "❌ You have already used /start.",
           ephemeral: true
         });
       }
 
-      // 💰 GIVE STARTING REWARD ONLY ONCE
+      // =============================
+      // LOCK FIRST (prevents spam exploit)
+      // =============================
+      user.started = 1;
+      saveUser(user);
+
+      // =============================
+      // GIVE REWARD (ONLY ONCE)
+      // =============================
       user.money = config.startingMoney ?? 1000;
       user.bank = config.startingBank ?? 500;
       user.xp = config.startingXP ?? 0;
       user.level = config.startingLevel ?? 0;
-
-      // 🔒 LOCK USER FOREVER
-      user.started = 1;
 
       saveUser(user);
 
@@ -41,10 +48,13 @@ module.exports = {
 
     } catch (err) {
       console.error("START ERROR:", err);
-      return interaction.reply({
-        content: "❌ Failed to start",
-        ephemeral: true
-      });
+
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Failed to start",
+          ephemeral: true
+        });
+      }
     }
   }
 };

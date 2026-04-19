@@ -21,7 +21,10 @@ function createDefaultUser() {
     bank: config.startingBank ?? 0,
     claims: {},
     streaks: structuredClone(DEFAULT_STREAKS),
+
+    // IMPORTANT: always number 0/1
     started: 0,
+
     joinedAt: Date.now()
   };
 }
@@ -44,12 +47,11 @@ CREATE TABLE IF NOT EXISTS users (
 `).run();
 
 // =============================
-// SAFE JSON
+// SAFE PARSE
 // =============================
 function safeParse(value, fallback = {}) {
   try {
     if (value === null || value === undefined) return fallback;
-    if (value === "" || value === "null" || value === "undefined") return fallback;
     return JSON.parse(String(value));
   } catch {
     return fallback;
@@ -57,7 +59,7 @@ function safeParse(value, fallback = {}) {
 }
 
 // =============================
-// NORMALIZE USER
+// NORMALIZE USER (FIXED)
 // =============================
 function normalizeUser(raw) {
   const streaks = safeParse(raw.streaks);
@@ -70,13 +72,16 @@ function normalizeUser(raw) {
     bank: Number(raw.bank) || 0,
 
     claims: safeParse(raw.claims),
+
     streaks: {
       daily: { ...DEFAULT_STREAKS.daily, ...(streaks.daily || {}) },
       weekly: { ...DEFAULT_STREAKS.weekly, ...(streaks.weekly || {}) },
       monthly: { ...DEFAULT_STREAKS.monthly, ...(streaks.monthly || {}) }
     },
 
-    started: Number(raw.started) || 0,
+    // 🔥 FIX: ALWAYS STRICT 0/1
+    started: raw.started === 1 ? 1 : 0,
+
     joinedAt: Number(raw.joinedAt) || Date.now()
   };
 }
@@ -107,7 +112,7 @@ function getUser(id) {
       user.joinedAt
     );
 
-    return { id, ...user };
+    return user;
   }
 
   return normalizeUser(row);

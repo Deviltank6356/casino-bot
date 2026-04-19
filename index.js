@@ -11,27 +11,54 @@ const client = new Client({
 client.commands = new Collection();
 
 // =============================
-// LOAD COMMANDS
+// SAFE REQUIRE CACHE CLEAR
 // =============================
-function load(dir) {
-  for (const file of fs.readdirSync(dir)) {
-    const full = path.join(dir, file);
+function clearRequireCache(file) {
+  delete require.cache[require.resolve(file)];
+}
 
-    if (fs.lstatSync(full).isDirectory()) {
-      load(full);
+// =============================
+// LOAD COMMANDS (RECURSIVE)
+// =============================
+function loadCommands(dir) {
+  if (!fs.existsSync(dir)) return;
+
+  const files = fs.readdirSync(dir);
+
+  for (const file of files) {
+    const fullPath = path.join(dir, file);
+
+    const stat = fs.lstatSync(fullPath);
+
+    if (stat.isDirectory()) {
+      loadCommands(fullPath);
       continue;
     }
 
-    const cmd = require(full);
+    if (!file.endsWith(".js")) continue;
 
-    if (cmd?.data?.name && cmd?.execute) {
-      client.commands.set(cmd.data.name, cmd);
-      console.log("✅ Loaded:", cmd.data.name);
+    try {
+      clearRequireCache(fullPath);
+
+      const cmd = require(fullPath);
+
+      if (cmd?.data?.name && typeof cmd.execute === "function") {
+        client.commands.set(cmd.data.name, cmd);
+        console.log("✅ Loaded:", cmd.data.name);
+      } else {
+        console.log("⚠️ Skipped invalid command:", file);
+      }
+
+    } catch (err) {
+      console.error(`❌ Failed loading ${file}:`, err.message);
     }
   }
 }
 
-load(path.join(__dirname, "commands"));
+// =============================
+// INIT LOAD
+// =============================
+loadCommands(path.join(__dirname, "commands"));
 
 // =============================
 // READY
@@ -41,20 +68,31 @@ client.once("ready", () => {
 });
 
 // =============================
-// INTERACTIONS
+// INTERACTION HANDLER
 // =============================
 client.on("interactionCreate", async (i) => {
   if (!i.isChatInputCommand()) return;
 
   const cmd = client.commands.get(i.commandName);
-  if (!cmd) return i.reply({ content: "❌ Not found", ephemeral: true });
+
+  if (!cmd) {
+    return i.reply({
+      content: "❌ Command not found",
+      ephemeral: true
+    });
+  }
 
   try {
     await cmd.execute(i, client);
+
   } catch (err) {
-    console.error(err);
-    if (!i.replied) {
-      return i.reply({ content: "❌ Error", ephemeral: true });
+    console.error(`❌ Command error (${i.commandName}):`, err);
+
+    if (!i.replied && !i.deferred) {
+      return i.reply({
+        content: "❌ Error executing command",
+        ephemeral: true
+      });
     }
   }
 });
