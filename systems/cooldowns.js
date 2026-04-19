@@ -1,16 +1,17 @@
 const map = new Map();
 
-// default cooldown (5s)
 const DEFAULT_COOLDOWN = 5000;
 
 // =============================
-// CLEANUP INTERVAL (every 30s)
+// CLEANUP (runs every 30s)
 // =============================
 setInterval(() => {
+  if (map.size === 0) return;
+
   const now = Date.now();
 
-  for (const [key, expire] of map.entries()) {
-    if (now > expire) {
+  for (const [key, expire] of map) {
+    if (expire <= now) {
       map.delete(key);
     }
   }
@@ -20,15 +21,22 @@ setInterval(() => {
 // CHECK COOLDOWN
 // =============================
 function check(userId, cmd, cooldown = DEFAULT_COOLDOWN) {
+  if (!userId || !cmd) return null;
+
+  cooldown = Number(cooldown);
+  if (!Number.isFinite(cooldown) || cooldown < 0) cooldown = DEFAULT_COOLDOWN;
+
   const key = `${userId}:${cmd}`;
   const now = Date.now();
 
   const expire = map.get(key);
 
-  if (expire && now < expire) {
-    return expire - now; // still on cooldown
+  // still on cooldown
+  if (expire && expire > now) {
+    return expire - now;
   }
 
+  // set new cooldown
   map.set(key, now + cooldown);
   return null;
 }

@@ -19,19 +19,15 @@ function createDefaultUser() {
     xp: config.startingXP ?? 0,
     level: config.startingLevel ?? 0,
     bank: config.startingBank ?? 0,
-
     claims: {},
     streaks: structuredClone(DEFAULT_STREAKS),
-
-    // 🔥 THIS WAS MISSING
     started: 0,
-
     joinedAt: Date.now()
   };
 }
 
 // =============================
-// TABLE SETUP (IMPORTANT FIX)
+// TABLE SETUP
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -40,23 +36,20 @@ CREATE TABLE IF NOT EXISTS users (
   xp INTEGER DEFAULT 0,
   level INTEGER DEFAULT 0,
   bank INTEGER DEFAULT 0,
-
   claims TEXT DEFAULT '{}',
   streaks TEXT DEFAULT '{}',
-
   started INTEGER DEFAULT 0,
-
   joinedAt INTEGER DEFAULT (strftime('%s','now') * 1000)
-);
+)
 `).run();
 
 // =============================
-// SAFE JSON PARSE
+// SAFE JSON
 // =============================
 function safeParse(value, fallback = {}) {
-  if (!value || value === "null" || value === "undefined") return fallback;
-
   try {
+    if (value === null || value === undefined) return fallback;
+    if (value === "" || value === "null" || value === "undefined") return fallback;
     return JSON.parse(String(value));
   } catch {
     return fallback;
@@ -83,9 +76,7 @@ function normalizeUser(raw) {
       monthly: { ...DEFAULT_STREAKS.monthly, ...(streaks.monthly || {}) }
     },
 
-    // 🔥 FIXED: NOW ALWAYS LOADED
-    started: Number(raw.started ?? 0),
-
+    started: Number(raw.started) || 0,
     joinedAt: Number(raw.joinedAt) || Date.now()
   };
 }

@@ -2,7 +2,9 @@ const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { getUser, saveUser } = require("../../db");
 const { requireStart } = require("../../utils/requireStart");
 
+// =============================
 // SYMBOL SYSTEM
+// =============================
 const symbols = [
   { emoji: "🍒", weight: 45, multiplier: 2 },
   { emoji: "🔔", weight: 30, multiplier: 1.5 },
@@ -40,12 +42,14 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // ✅ FIXED START CHECK (correct usage)
+      // =============================
+      // SAFE START CHECK (FIXED ROOT ISSUE)
+      // =============================
       if (!requireStart(user, interaction)) return;
 
       const bet = interaction.options.getInteger("bet");
 
-      // BET VALIDATION FIX
+      // BET VALIDATION (SAFE)
       if (!Number.isFinite(bet) || bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet amount",
@@ -91,11 +95,7 @@ module.exports = {
 
       user.money = Number(user.money || 0) + change;
 
-      try {
-        saveUser(user);
-      } catch (err) {
-        console.error("DB SAVE ERROR:", err);
-      }
+      saveUser(user);
 
       const embed = new EmbedBuilder()
         .setTitle("🎰 Slots")

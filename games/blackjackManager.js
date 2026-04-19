@@ -4,12 +4,18 @@ const games = new Map();
 
 const draw = () => Math.floor(Math.random() * 10) + 1;
 
+// =============================
+// START GAME
+// =============================
 function start(userId, bet) {
   const user = getUser(userId);
 
-  if (!user || user.money < bet) return null;
+  if (!user || typeof user.money !== "number") return null;
+  if (bet <= 0) return null;
+  if (user.money < bet) return null;
+  if (games.has(userId)) return null; // prevent double game
 
-  // reserve money immediately (prevents dup betting)
+  // reserve bet safely
   user.money -= bet;
   saveUser(user);
 
@@ -26,6 +32,9 @@ function start(userId, bet) {
   return game;
 }
 
+// =============================
+// HIT
+// =============================
 function hit(userId) {
   const g = games.get(userId);
   if (!g || g.over) return null;
@@ -39,6 +48,9 @@ function hit(userId) {
   return g;
 }
 
+// =============================
+// STAND
+// =============================
 function stand(userId) {
   const g = games.get(userId);
   if (!g || g.over) return null;
@@ -53,26 +65,43 @@ function stand(userId) {
   return end(userId, "lose");
 }
 
+// =============================
+// END GAME (FIXED ECONOMY)
+// =============================
 function end(userId, result) {
   const g = games.get(userId);
   if (!g || g.over) return null;
 
   const user = getUser(userId);
 
-  if (result === "win") user.money += g.bet * 2; // win returns bet + profit
-  if (result === "push") user.money += g.bet;    // refund
-  // lose = nothing (already deducted)
+  // IMPORTANT:
+  // bet was already deducted in start()
+
+  if (result === "win") {
+    user.money += g.bet * 2; // return bet + winnings
+  }
+
+  if (result === "push") {
+    user.money += g.bet; // refund
+  }
+
+  // lose = nothing
 
   saveUser(user);
 
   g.result = result;
   g.over = true;
 
+  games.set(userId, g);
+
   setTimeout(() => games.delete(userId), 10000);
 
   return g;
 }
 
+// =============================
+// HELPERS
+// =============================
 function getGame(userId) {
   return games.get(userId);
 }

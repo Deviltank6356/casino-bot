@@ -1,20 +1,31 @@
 const { EmbedBuilder } = require("discord.js");
 const config = require("../config.json");
 
-// cache channel so we don't fetch every time
 let logChannel = null;
 
 // =============================
-// GET LOG CHANNEL (CACHED)
+// GET LOG CHANNEL (SAFE CACHE)
 // =============================
 async function getLogChannel(client) {
-  if (logChannel) return logChannel;
-
   try {
-    logChannel = await client.channels.fetch(config.logChannelId);
-    return logChannel;
+    if (!config.logChannelId) return null;
+
+    // If cached channel still exists, reuse it
+    if (logChannel) return logChannel;
+
+    const channel = await client.channels.fetch(config.logChannelId).catch(() => null);
+
+    if (!channel) {
+      console.error("❌ Log channel not found or inaccessible");
+      return null;
+    }
+
+    logChannel = channel;
+    return channel;
+
   } catch (err) {
     console.error("❌ Failed to fetch log channel:", err);
+    logChannel = null; // reset cache so next attempt retries
     return null;
   }
 }
@@ -27,7 +38,7 @@ async function logAdminAction(client, interaction, action, details = "") {
     const channel = await getLogChannel(client);
     if (!channel) return;
 
-    const user = interaction?.user;
+    const user = interaction?.user ?? interaction?.author ?? null;
 
     const embed = new EmbedBuilder()
       .setTitle("🛡️ Admin Action Log")
@@ -35,19 +46,17 @@ async function logAdminAction(client, interaction, action, details = "") {
       .addFields(
         {
           name: "Action",
-          value: String(action || "Unknown"),
+          value: action ? String(action) : "Unknown",
           inline: true
         },
         {
           name: "User",
-          value: user
-            ? `${user.tag} (${user.id})`
-            : "Unknown user",
+          value: user ? `${user.tag} (${user.id})` : "Unknown",
           inline: false
         },
         {
           name: "Details",
-          value: details?.toString() || "None",
+          value: details ? String(details).slice(0, 1024) : "None",
           inline: false
         }
       )
@@ -56,7 +65,7 @@ async function logAdminAction(client, interaction, action, details = "") {
     await channel.send({ embeds: [embed] });
 
   } catch (err) {
-    // IMPORTANT: never crash bot because of logging
+    // never crash bot due to logging
     console.error("❌ logAdminAction failed:", err);
   }
 }

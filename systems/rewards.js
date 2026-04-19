@@ -12,55 +12,67 @@ const BASE_REWARDS = {
   monthly: 30000
 };
 
-const STREAK_MULTIPLIER = {
-  daily: 1.15,
-  weekly: 1.25,
-  monthly: 1.4
+// safer streak scaling (caps growth)
+const STREAK_BONUS = {
+  daily: 0.05,
+  weekly: 0.08,
+  monthly: 0.1
 };
 
+// =============================
+// CLAIM REWARD
+// =============================
 function claim(id, type) {
   const user = getUser(id);
 
+  if (!TIMES[type]) {
+    return { error: "Invalid reward type" };
+  }
+
   if (!user.claims) user.claims = {};
-  if (!user.streaks) user.streaks = { daily: 0, weekly: 0, monthly: 0 };
+  if (!user.streaks) user.streaks = {};
+
+  user.streaks[type] = Number(user.streaks[type] || 0);
 
   const now = Date.now();
-
-  const lastClaim = user.claims[type] || 0;
-  const timeLimit = TIMES[type];
+  const lastClaim = Number(user.claims[type] || 0);
+  const cooldown = TIMES[type];
 
   // =============================
   // COOLDOWN CHECK
   // =============================
-  if (now - lastClaim < timeLimit) {
+  if (now - lastClaim < cooldown) {
+    const remaining = cooldown - (now - lastClaim);
+
     return {
-      error: `Already claimed. Try again later.`
+      error: `⏳ Already claimed. Try again in ${Math.ceil(remaining / 60000)} min.`
     };
   }
 
   // =============================
   // STREAK LOGIC
   // =============================
-  const missedCycle = now - lastClaim > timeLimit * 2;
+  const missed = now - lastClaim > cooldown * 2;
 
-  if (missedCycle) {
-    user.streaks[type] = 1; // reset streak
+  if (missed) {
+    user.streaks[type] = 1;
   } else {
-    user.streaks[type] = (user.streaks[type] || 0) + 1;
+    user.streaks[type] += 1;
   }
 
   const streak = user.streaks[type];
 
   // =============================
-  // REWARD CALCULATION
+  // REWARD CALCULATION (CONTROLLED GROWTH)
   // =============================
   const base = BASE_REWARDS[type];
 
-  const multiplier = 1 + (streak * STREAK_MULTIPLIER[type] / 10);
+  const multiplier = 1 + Math.min(streak * STREAK_BONUS[type], 2); 
+  // cap bonus at +200%
 
   const reward = Math.floor(base * multiplier);
 
-  user.money += reward;
+  user.money = Number(user.money || 0) + reward;
 
   // update claim time
   user.claims[type] = now;

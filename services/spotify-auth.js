@@ -6,11 +6,31 @@ const config = require("../config.json");
 
 const app = express();
 
+const CONFIG_PATH = path.join(__dirname, "../config.json");
+
+// =============================
+// SPOTIFY INSTANCE (base only)
+// =============================
 const spotify = new SpotifyWebApi({
   clientId: config.spotify.clientId,
   clientSecret: config.spotify.clientSecret,
   redirectUri: config.spotify.redirectUri
 });
+
+// =============================
+// HELPERS
+// =============================
+function saveRefreshToken(token) {
+  const updated = {
+    ...config,
+    spotify: {
+      ...config.spotify,
+      refreshToken: token
+    }
+  };
+
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2));
+}
 
 // =============================
 // LOGIN
@@ -22,7 +42,7 @@ app.get("/login", (req, res) => {
     "user-read-recently-played"
   ];
 
-  const state = Math.random().toString(36).substring(2, 15);
+  const state = Math.random().toString(36).slice(2);
 
   const url = spotify.createAuthorizeURL(scopes, state);
   res.redirect(url);
@@ -33,15 +53,14 @@ app.get("/login", (req, res) => {
 // =============================
 app.get("/callback", async (req, res) => {
   try {
-    const { code, error } = req.query;
+    const { code, error, state } = req.query;
 
     if (error) {
-      console.error("Spotify OAuth error:", error);
-      return res.status(400).send("OAuth denied");
+      return res.status(400).send("❌ OAuth denied");
     }
 
     if (!code) {
-      return res.status(400).send("No code received");
+      return res.status(400).send("❌ No code received");
     }
 
     const data = await spotify.authorizationCodeGrant(code);
@@ -49,37 +68,47 @@ app.get("/callback", async (req, res) => {
     const accessToken = data.body.access_token;
     const refreshToken = data.body.refresh_token;
 
-    console.log("✅ ACCESS TOKEN RECEIVED");
-    console.log("🔁 REFRESH TOKEN RECEIVED");
+    console.log("✅ Spotify tokens received");
 
-    // IMPORTANT: set tokens immediately
+    // Set tokens for immediate use
     spotify.setAccessToken(accessToken);
     spotify.setRefreshToken(refreshToken);
 
-    // update config safely
-    const updatedConfig = {
-      ...config,
-      spotify: {
-        ...config.spotify,
-        refreshToken
-      }
-    };
-
-    fs.writeFileSync(
-      path.join(__dirname, "../config.json"),
-      JSON.stringify(updatedConfig, null, 2)
-    );
+    // Persist refresh token ONLY
+    saveRefreshToken(refreshToken);
 
     res.send("✅ Spotify connected successfully. You can close this tab.");
 
   } catch (err) {
     console.error("Spotify auth failed:", err?.body || err.message || err);
-    res.status(500).send("Auth failed");
+    res.status(500).send("❌ Auth failed");
   }
 });
 
 // =============================
+// REFRESH TOKEN HELPER (IMPORTANT FIX)
+// =============================
+async function refreshAccessToken() {
+  try {
+    spotify.setRefreshToken(config.spotify.refreshToken);
+
+    const data = await spotify.refreshAccessToken();
+
+    spotify.setAccessToken(data.body.access_token);
+
+    console.log("🔄 Spotify access token refreshed");
+    return data.body.access_token;
+
+  } catch (err) {
+    console.error("❌ Refresh failed:", err.message);
+    return null;
+  }
+}
+
+// =============================
 app.listen(3000, "0.0.0.0", () => {
   console.log("🚀 Spotify Auth running on port 3000");
-  console.log("Login URL: http://localhost:3000/login");
+  console.log("➡ Login: http://localhost:3000/login");
 });
+
+module.exports = { spotify, refreshAccessToken };

@@ -1,7 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { getUser, saveUser } = require("../../db");
 
+// =============================
 // RED NUMBERS
+// =============================
 function isRed(number) {
   return [
     1,3,5,7,9,12,14,16,18,
@@ -9,13 +11,21 @@ function isRed(number) {
   ].includes(number);
 }
 
-// START CHECK
+// =============================
+// SAFE START CHECK (IMPORTANT FIX)
+// =============================
+function hasStarted(user) {
+  return Number(user?.started) === 1;
+}
+
 function requireStart(user, interaction) {
-  if (user.started !== 1) {
-    interaction.reply({
-      content: "❌ You must run /start first!",
-      ephemeral: true
-    });
+  if (!hasStarted(user)) {
+    if (!interaction.replied && !interaction.deferred) {
+      interaction.reply({
+        content: "❌ You must run /start first!",
+        ephemeral: true
+      });
+    }
     return false;
   }
   return true;
@@ -44,14 +54,14 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // START CHECK FIXED
+      // START CHECK (FIXED + SAFE)
       if (!requireStart(user, interaction)) return;
 
       const bet = interaction.options.getInteger("bet");
       const type = interaction.options.getString("type")?.toLowerCase();
       const pick = interaction.options.getInteger("number");
 
-      // BET VALIDATION FIX
+      // BET VALIDATION (FIXED)
       if (!Number.isFinite(bet) || bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet",
@@ -59,7 +69,7 @@ module.exports = {
         });
       }
 
-      if (user.money < bet) {
+      if ((user.money ?? 0) < bet) {
         return interaction.reply({
           content: "❌ Not enough money",
           ephemeral: true
@@ -100,13 +110,13 @@ module.exports = {
         multiplier = 2;
       }
       else if (type === "odd") {
-        win = result % 2 === 1;
+        win = result !== 0 && result % 2 === 1;
         multiplier = 2;
       }
 
       // HIGH / LOW
       else if (type === "high") {
-        win = result >= 19;
+        win = result >= 19 && result <= 36;
         multiplier = 2;
       }
       else if (type === "low") {

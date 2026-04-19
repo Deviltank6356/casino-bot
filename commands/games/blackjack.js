@@ -9,15 +9,23 @@ const {
 const manager = require("../../games/blackjackManager");
 const { getUser } = require("../../db");
 
-// ACTIVE GAME LOCK
 const activeGames = new Map();
 
+// =============================
+// SAFE START CHECK
+// =============================
+function hasStarted(user) {
+  return Number(user?.started) === 1;
+}
+
 function requireStart(user, interaction) {
-  if (user.started !== 1) {
-    interaction.reply({
-      content: "❌ You must run /start first!",
-      ephemeral: true
-    });
+  if (!hasStarted(user)) {
+    if (!interaction.replied && !interaction.deferred) {
+      interaction.reply({
+        content: "❌ You must run /start first!",
+        ephemeral: true
+      });
+    }
     return false;
   }
   return true;
@@ -37,12 +45,11 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // START CHECK (FIXED)
+      // START CHECK (FIXED + SAFE)
       if (!requireStart(user, interaction)) return;
 
       const bet = interaction.options.getInteger("bet");
 
-      // BET VALIDATION
       if (!Number.isFinite(bet) || bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet",
@@ -57,7 +64,6 @@ module.exports = {
         });
       }
 
-      // GAME LOCK
       if (activeGames.has(interaction.user.id)) {
         return interaction.reply({
           content: "❌ You already have an active blackjack game",
@@ -131,7 +137,6 @@ module.exports = {
     }
   },
 
-  // CLEANUP
   endGame(userId) {
     activeGames.delete(userId);
   },
