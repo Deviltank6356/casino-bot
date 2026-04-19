@@ -1,151 +1,113 @@
 const SpotifyWebApi = require("spotify-web-api-node");
-const config = require("../config.json");
 const { getUser } = require("../db");
-const client = require("../client"); // your discord client
+const Database = require("better-sqlite3");
+const path = require("path");
+const client = require("../client");
 
-let lastRefresh = 0;
-let lastTrackMap = new Map(); // userId → trackId
+const db = new Database(path.join(__dirname, "../casino.db"));
+
+let lastTrackMap = new Map();
 
 // =============================
-// INIT CLIENT
+// GET USER TOKEN
 // =============================
-const spotify = new SpotifyWebApi({
-  clientId: config.spotify.clientId,
-  clientSecret: config.spotify.clientSecret,
-  refreshToken: config.spotify.refreshToken
-});
+function getRefreshToken(userId) {
+  const row = db
+    .prepare("SELECT refreshToken FROM spotify_tokens WHERE userId = ?")
+    .get(userId);
 
-// apply refresh token immediately
-if (config.spotify.refreshToken) {
-  spotify.setRefreshToken(config.spotify.refreshToken);
+  return row?.refreshToken || null;
 }
 
 // =============================
-// INIT SPOTIFY
+// CREATE SPOTIFY CLIENT PER USER
 // =============================
-async function initSpotify() {
-  try {
-    if (!config.spotify.refreshToken) {
-      console.error("❌ Missing refresh token");
-      return;
-    }
+function createSpotifyClient(refreshToken) {
+  const spotify = new SpotifyWebApi({
+    clientId: require("../config.json").spotify.clientId,
+    clientSecret: require("../config.json").spotify.clientSecret
+  });
 
-    const data = await spotify.refreshAccessToken();
-    const token = data?.body?.access_token;
-
-    if (!token) {
-      console.error("❌ Failed to init Spotify");
-      return;
-    }
-
-    spotify.setAccessToken(token);
-    lastRefresh = Date.now();
-
-    console.log("✅ Spotify initialized");
-
-  } catch (err) {
-    console.error("❌ Spotify init failed:", err?.message || err);
-  }
+  spotify.setRefreshToken(refreshToken);
+  return spotify;
 }
 
-initSpotify();
+// =============================
+// GET CURRENT TRACK FOR USER
+// =============================
+async function getTrackForUser(userId) {
+  const refreshToken = getRefreshToken(userId);
+  if (!refreshToken) return null;
 
-// =============================
-// REFRESH TOKEN (SAFE)
-// =============================
-async function refreshToken() {
+  const spotify = createSpotifyClient(refreshToken);
+
   try {
-    const now = Date.now();
-
-    if (!spotify.getRefreshToken()) return false;
-
-    if (now - lastRefresh < 300000 && spotify.getAccessToken()) {
-      return true;
-    }
-
     const data = await spotify.refreshAccessToken();
-    const token = data?.body?.access_token;
+    const accessToken = data?.body?.access_token;
 
-    if (!token) return false;
+    if (!accessToken) return null;
 
-    spotify.setAccessToken(token);
-    lastRefresh = now;
+    spotify.setAccessToken(accessToken);
 
-    return true;
+    const res = await spotify.getMyCurrentPlayingTrack();
+
+    if (!res?.body?.item) return null;
+
+    return {
+      id: res.body.item.id,
+      name: res.body.item.name,
+      artists: res.body.item.artists.map(a => a.name).join(", "),
+      url: res.body.item.external_urls.spotify,
+      isPlaying: res.body.is_playing
+    };
 
   } catch (err) {
-    console.error("Spotify refresh error:", err?.message || err);
-    return false;
+    console.error("Spotify user error:", err?.message || err);
+    return null;
   }
 }
 
 // =============================
-// FETCH CURRENT TRACK (RAW)
-// =============================
-async function fetchTrack() {
-  const res = await spotify.getMyCurrentPlayingTrack();
-
-  if (!res?.body) return null;
-  if (!res.body.item) return null;
-
-  return res.body;
-}
-
-// =============================
-// REAL-TIME LOOP (THIS IS THE KEY)
+// REAL-TIME LOOP
 // =============================
 async function tick() {
-  try {
-    await refreshToken();
+  const users = Array.from(lastTrackMap.keys());
 
-    const users = Array.from(lastTrackMap.keys());
+  for (const userId of users) {
+    const user = getUser(userId);
+    if (!user) continue;
 
-    for (const userId of users) {
-      const user = getUser(userId);
+    const track = await getTrackForUser(userId);
+    if (!track) continue;
 
-      if (!user?.spotifyLinked) continue;
+    const old = lastTrackMap.get(userId);
 
-      const trackData = await fetchTrack();
-      if (!trackData?.item) continue;
+    if (old === track.id) continue;
 
-      const newId = trackData.item.id;
-      const oldId = lastTrackMap.get(userId);
+    lastTrackMap.set(userId, track.id);
 
-      // no change → ignore
-      if (newId === oldId) continue;
+    const channel = client.channels.cache.get(user.lastChannelId);
+    if (!channel) continue;
 
-      lastTrackMap.set(userId, newId);
-
-      const channel = client.channels.cache.get(user.lastChannelId);
-      if (!channel) continue;
-
-      channel.send({
-        content:
-          `🎧 **Live Now Playing**\n` +
-          `👤 <@${userId}>\n` +
-          `🎵 ${trackData.item.name}\n` +
-          `🎤 ${trackData.item.artists.map(a => a.name).join(", ")}`
-      });
-    }
-
-  } catch (err) {
-    console.error("Spotify tick error:", err?.message || err);
+    channel.send({
+      content:
+        `🎧 **Live Now Playing**\n` +
+        `👤 <@${userId}>\n` +
+        `🎵 ${track.name}\n` +
+        `🎤 ${track.artists}\n` +
+        `🔗 ${track.url}`
+    });
   }
 }
 
-// run every 15 seconds (REAL-TIME FEEL)
+// run every 15s
 setInterval(tick, 15000);
 
 // =============================
-// REGISTER USER FOR LIVE UPDATES
+// REGISTER USER
 // =============================
 function registerUser(userId) {
   lastTrackMap.set(userId, null);
 }
 
-// =============================
-// EXPORTS
-// =============================
-module.exports = {
-  registerUser
-};
+module.exports = { registerUser };
