@@ -1,7 +1,11 @@
 const Database = require("better-sqlite3");
 const config = require("./config.json");
+const path = require("path");
 
-const db = new Database("casino.db");
+// =============================
+// DB (ABSOLUTE PATH = SAFE WITH PM2)
+// =============================
+const db = new Database(path.join(__dirname, "casino.db"));
 
 // =============================
 // DEFAULTS
@@ -23,7 +27,7 @@ const DEFAULT_USER = () => ({
 });
 
 // =============================
-// TABLE SETUP (ONLY ONCE)
+// TABLE SETUP (SAFE + CONSISTENT)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -35,22 +39,24 @@ CREATE TABLE IF NOT EXISTS users (
   claims TEXT DEFAULT '{}',
   streaks TEXT DEFAULT '{}',
   joinedAt INTEGER DEFAULT (strftime('%s','now') * 1000)
-)
+);
 `).run();
 
 // =============================
-// SAFE JSON
+// SAFE JSON PARSER (FIXED)
 // =============================
 function safeParse(input, fallback = {}) {
   try {
-    return input ? JSON.parse(input) : fallback;
+    if (input === null || input === undefined) return fallback;
+    if (input === "" || input === "null" || input === "undefined") return fallback;
+    return JSON.parse(String(input));
   } catch {
     return fallback;
   }
 }
 
 // =============================
-// NORMALIZE USER (ROBUST)
+// NORMALIZE USER (SAFE CASTING)
 // =============================
 function normalizeUser(raw) {
   const streaks = safeParse(raw.streaks, {});
@@ -67,7 +73,7 @@ function normalizeUser(raw) {
       weekly: { ...DEFAULT_STREAKS.weekly, ...(streaks.weekly || {}) },
       monthly: { ...DEFAULT_STREAKS.monthly, ...(streaks.monthly || {}) }
     },
-    joinedAt: raw.joinedAt ?? Date.now()
+    joinedAt: Number(raw.joinedAt ?? Date.now())
   };
 }
 
@@ -75,55 +81,67 @@ function normalizeUser(raw) {
 // GET USER (AUTO CREATE)
 // =============================
 function getUser(id) {
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  try {
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
 
-  if (!user) {
-    const newUser = { id, ...DEFAULT_USER() };
+    if (!user) {
+      const newUser = { id, ...DEFAULT_USER() };
 
-    db.prepare(`
-      INSERT INTO users (id, money, xp, level, bank, claims, streaks, joinedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      newUser.money,
-      newUser.xp,
-      newUser.level,
-      newUser.bank,
-      JSON.stringify(newUser.claims),
-      JSON.stringify(newUser.streaks),
-      newUser.joinedAt
-    );
+      db.prepare(`
+        INSERT INTO users (id, money, xp, level, bank, claims, streaks, joinedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        newUser.money,
+        newUser.xp,
+        newUser.level,
+        newUser.bank,
+        JSON.stringify(newUser.claims),
+        JSON.stringify(newUser.streaks),
+        newUser.joinedAt
+      );
 
-    return newUser;
+      return newUser;
+    }
+
+    return normalizeUser(user);
+
+  } catch (err) {
+    console.error("🔥 DB getUser error:", err);
+    throw err;
   }
-
-  return normalizeUser(user);
 }
 
 // =============================
 // SAVE USER
 // =============================
 function saveUser(user) {
-  const u = normalizeUser(user);
+  try {
+    const u = normalizeUser(user);
 
-  db.prepare(`
-    UPDATE users
-    SET money = ?,
-        xp = ?,
-        level = ?,
-        bank = ?,
-        claims = ?,
-        streaks = ?
-    WHERE id = ?
-  `).run(
-    u.money,
-    u.xp,
-    u.level,
-    u.bank,
-    JSON.stringify(u.claims),
-    JSON.stringify(u.streaks),
-    u.id
-  );
+    db.prepare(`
+      UPDATE users
+      SET money = ?,
+          xp = ?,
+          level = ?,
+          bank = ?,
+          claims = ?,
+          streaks = ?
+      WHERE id = ?
+    `).run(
+      u.money,
+      u.xp,
+      u.level,
+      u.bank,
+      JSON.stringify(u.claims),
+      JSON.stringify(u.streaks),
+      u.id
+    );
+
+  } catch (err) {
+    console.error("🔥 DB saveUser error:", err);
+    throw err;
+  }
 }
 
 module.exports = {
