@@ -27,7 +27,7 @@ function createDefaultUser() {
 }
 
 // =============================
-// TABLE (SAFE)
+// TABLE (SAFE + FIXED)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -39,17 +39,12 @@ CREATE TABLE IF NOT EXISTS users (
   claims TEXT DEFAULT '{}',
   streaks TEXT DEFAULT '{}',
   started INTEGER DEFAULT 0,
-  joinedAt INTEGER
+  joinedAt INTEGER DEFAULT (strftime('%s','now') * 1000)
 );
 `).run();
 
-// 🔥 FIX: auto-migrate missing column (IMPORTANT)
-try {
-  db.prepare(`ALTER TABLE users ADD COLUMN started INTEGER DEFAULT 0`).run();
-} catch (_) {}
-
 // =============================
-// SAFE PARSE (ROBUST)
+// SAFE JSON
 // =============================
 function safeParse(v, fallback = {}) {
   try {
@@ -61,7 +56,7 @@ function safeParse(v, fallback = {}) {
 }
 
 // =============================
-// NORMALIZE (FIXED)
+// NORMALIZE (HARDENED)
 // =============================
 function normalize(raw) {
   const streaks = safeParse(raw.streaks);
@@ -82,8 +77,8 @@ function normalize(raw) {
       monthly: { count: 0, last: 0, ...(streaks.monthly || {}) }
     },
 
-    // 🔥 HARD LOCK
-    started: raw.started === 1 ? 1 : 0,
+    // 🔒 HARD LOCK (ONLY 0 or 1)
+    started: Number(raw.started) === 1 ? 1 : 0,
 
     joinedAt: Number(raw.joinedAt) || Date.now()
   };
@@ -111,7 +106,7 @@ function getUser(id) {
       u.bank,
       JSON.stringify(u.claims),
       JSON.stringify(u.streaks),
-      u.started,
+      0, // 🔒 force not started on creation
       u.joinedAt
     );
 
@@ -122,7 +117,7 @@ function getUser(id) {
 }
 
 // =============================
-// SAVE USER (SAFE + CONSISTENT)
+// SAVE USER
 // =============================
 function saveUser(user) {
   const u = normalize(user);

@@ -7,7 +7,7 @@ const commands = [];
 const seen = new Set();
 
 // =============================
-// LOAD COMMANDS
+// SAFE LOAD
 // =============================
 function loadCommands(dir) {
   const files = fs.readdirSync(dir);
@@ -16,12 +16,17 @@ function loadCommands(dir) {
     const fullPath = path.join(dir, file);
 
     try {
-      if (fs.lstatSync(fullPath).isDirectory()) {
+      const stat = fs.lstatSync(fullPath);
+
+      if (stat.isDirectory()) {
         loadCommands(fullPath);
         continue;
       }
 
+      if (!file.endsWith(".js")) continue;
+
       delete require.cache[require.resolve(fullPath)];
+
       const command = require(fullPath);
 
       if (!command?.data?.toJSON) {
@@ -29,25 +34,32 @@ function loadCommands(dir) {
         continue;
       }
 
-      const json = command.data.toJSON();
+      let json;
+      try {
+        json = command.data.toJSON();
+      } catch (e) {
+        console.error(`❌ toJSON failed: ${fullPath}`, e);
+        continue;
+      }
 
       if (!json?.name) {
         console.warn(`⚠️ Missing name: ${fullPath}`);
         continue;
       }
 
-      // =============================
-      // DUPLICATE CHECK (NO RENAMING)
-      // =============================
-      if (seen.has(json.name)) {
-        console.error(`❌ Duplicate command ignored: ${json.name}`);
-        continue; // IMPORTANT: skip instead of renaming
+      // normalize name
+      const name = json.name.toLowerCase().trim();
+
+      // strict duplicate protection
+      if (seen.has(name)) {
+        console.error(`❌ Duplicate command ignored: ${name}`);
+        continue;
       }
 
-      seen.add(json.name);
+      seen.add(name);
       commands.push(json);
 
-      console.log(`✅ Loaded: ${json.name}`);
+      console.log(`✅ Loaded: ${name}`);
 
     } catch (err) {
       console.error(`💥 Failed loading: ${fullPath}`, err);
@@ -55,7 +67,23 @@ function loadCommands(dir) {
   }
 }
 
+// =============================
 loadCommands(path.join(__dirname, "commands"));
+
+// =============================
+// FINAL CLEANUP (EXTRA SAFETY)
+// =============================
+const uniqueCommands = [];
+const finalSeen = new Set();
+
+for (const cmd of commands) {
+  const name = cmd.name.toLowerCase();
+
+  if (finalSeen.has(name)) continue;
+
+  finalSeen.add(name);
+  uniqueCommands.push(cmd);
+}
 
 // =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
@@ -63,14 +91,15 @@ const rest = new REST({ version: "10" }).setToken(config.token);
 // =============================
 (async () => {
   try {
-    console.log(`🚀 Deploying ${commands.length} commands...`);
+    console.log(`🚀 Deploying ${uniqueCommands.length} commands...`);
 
     const result = await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
-      { body: commands }
+      { body: uniqueCommands }
     );
 
-    console.log(`✅ Deployed ${result.length} commands`);
+    console.log(`✅ Successfully deployed ${result.length} commands`);
+
   } catch (err) {
     console.error("❌ Deploy failed:", err);
   }

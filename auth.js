@@ -9,12 +9,12 @@ const app = express();
 const db = new Database(path.join(__dirname, "casino.db"));
 
 // =============================
-// DB TABLE (SAFE)
+// TABLE
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS spotify_tokens (
   userId TEXT PRIMARY KEY,
-  refreshToken TEXT
+  refreshToken TEXT NOT NULL
 )
 `).run();
 
@@ -28,7 +28,7 @@ const spotify = new SpotifyWebApi({
 });
 
 // =============================
-// LOGIN ROUTE (DISCORD USER LINKED)
+// LOGIN ROUTE
 // =============================
 app.get("/login", (req, res) => {
   const userId = req.query.user;
@@ -45,45 +45,61 @@ app.get("/login", (req, res) => {
 
   const url = spotify.createAuthorizeURL(
     scopes,
-    userId,   // 🔥 STATE = DISCORD USER ID
-    true
+    userId,
+    true // force consent
   );
 
   res.redirect(url);
 });
 
 // =============================
-// CALLBACK ROUTE
+// CALLBACK ROUTE (FIXED + VERIFIED)
 // =============================
 app.get("/callback", async (req, res) => {
   try {
-    const code = req.query.code;
-    const state = req.query.state; // Discord user ID
+    const { code, state } = req.query;
 
     if (!code || !state) {
       return res.status(400).send("Missing code or state");
     }
 
+    // exchange code → tokens
     const data = await spotify.authorizationCodeGrant(code);
 
-    const refreshToken = data.body.refresh_token;
+    const refreshToken = data?.body?.refresh_token;
+    const accessToken = data?.body?.access_token;
 
-    if (!refreshToken) {
-      return res.status(500).send("No refresh token received");
+    if (!refreshToken || !accessToken) {
+      return res.status(500).send("Invalid Spotify response");
     }
 
-    // =============================
-    // SAVE PER USER (IMPORTANT FIX)
-    // =============================
+    // verify token works (IMPORTANT)
+    spotify.setAccessToken(accessToken);
+
+    const test = await spotify.getMe().catch(() => null);
+
+    if (!test) {
+      return res.status(500).send("Spotify verification failed");
+    }
+
+    // store per user
     db.prepare(`
       INSERT OR REPLACE INTO spotify_tokens (userId, refreshToken)
       VALUES (?, ?)
     `).run(state, refreshToken);
 
+    console.log(`✅ Linked Spotify for user: ${state}`);
+
     res.send("Spotify linked successfully ✔ You can close this tab.");
 
   } catch (err) {
-    console.error("Spotify auth error:", err?.body || err.message || err);
+    console.error("❌ Spotify auth error:");
+    console.dir({
+      message: err?.message,
+      body: err?.body,
+      status: err?.statusCode
+    }, { depth: 5 });
+
     res.status(500).send("Auth failed");
   }
 });
@@ -92,9 +108,9 @@ app.get("/callback", async (req, res) => {
 // START SERVER
 // =============================
 app.listen(3000, "0.0.0.0", () => {
-  console.log("Server running");
+  console.log("🚀 Spotify auth server running");
 
   console.log(
-    `Login: https://YOUR-TUNNEL.trycloudflare.com/login?user=DISCORD_USER_ID`
+    `Login URL: https://YOUR-TUNNEL.trycloudflare.com/login?user=DISCORD_USER_ID`
   );
 });

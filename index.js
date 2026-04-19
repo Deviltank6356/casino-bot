@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
-
 const config = require("./config.json");
 
 const client = new Client({
@@ -11,14 +10,7 @@ const client = new Client({
 client.commands = new Collection();
 
 // =============================
-// SAFE REQUIRE CACHE CLEAR
-// =============================
-function clearRequireCache(file) {
-  delete require.cache[require.resolve(file)];
-}
-
-// =============================
-// LOAD COMMANDS (RECURSIVE)
+// LOAD COMMANDS (SAFE + DEDUPED)
 // =============================
 function loadCommands(dir) {
   if (!fs.existsSync(dir)) return;
@@ -28,43 +20,62 @@ function loadCommands(dir) {
   for (const file of files) {
     const fullPath = path.join(dir, file);
 
-    const stat = fs.lstatSync(fullPath);
-
-    if (stat.isDirectory()) {
-      loadCommands(fullPath);
-      continue;
-    }
-
-    if (!file.endsWith(".js")) continue;
-
     try {
-      clearRequireCache(fullPath);
+      const stat = fs.lstatSync(fullPath);
+
+      if (stat.isDirectory()) {
+        loadCommands(fullPath);
+        continue;
+      }
+
+      if (!file.endsWith(".js")) continue;
 
       const cmd = require(fullPath);
 
-      if (cmd?.data?.name && typeof cmd.execute === "function") {
-        client.commands.set(cmd.data.name, cmd);
-        console.log("✅ Loaded:", cmd.data.name);
-      } else {
-        console.log("⚠️ Skipped invalid command:", file);
+      if (!cmd?.data || !cmd?.execute) {
+        console.log(`⚠️ Skipped invalid command: ${file}`);
+        continue;
       }
 
+      let name;
+
+      try {
+        name = cmd.data.toJSON().name;
+      } catch {
+        console.log(`⚠️ Failed to parse command: ${file}`);
+        continue;
+      }
+
+      if (!name) {
+        console.log(`⚠️ Missing name in: ${file}`);
+        continue;
+      }
+
+      const key = name.toLowerCase();
+
+      // 🔥 HARD DUPLICATE PREVENTION
+      if (client.commands.has(key)) {
+        console.error(`❌ Duplicate command blocked: ${key}`);
+        continue;
+      }
+
+      client.commands.set(key, cmd);
+      console.log(`✅ Loaded command: ${key}`);
+
     } catch (err) {
-      console.error(`❌ Failed loading ${file}:`, err.message);
+      console.error(`❌ Failed loading ${file}:`, err);
     }
   }
 }
 
 // =============================
-// INIT LOAD
-// =============================
 loadCommands(path.join(__dirname, "commands"));
 
 // =============================
-// READY
+// READY EVENT
 // =============================
 client.once("ready", () => {
-  console.log("🚀 Casino bot online");
+  console.log(`🚀 Casino bot online as ${client.user.tag}`);
 });
 
 // =============================
@@ -73,12 +84,12 @@ client.once("ready", () => {
 client.on("interactionCreate", async (i) => {
   if (!i.isChatInputCommand()) return;
 
-  const cmd = client.commands.get(i.commandName);
+  const cmd = client.commands.get(i.commandName.toLowerCase());
 
   if (!cmd) {
     return i.reply({
       content: "❌ Command not found",
-      ephemeral: true
+      flags: 64
     });
   }
 
@@ -91,13 +102,11 @@ client.on("interactionCreate", async (i) => {
     if (!i.replied && !i.deferred) {
       return i.reply({
         content: "❌ Error executing command",
-        ephemeral: true
+        flags: 64
       });
     }
   }
 });
 
-// =============================
-// LOGIN
 // =============================
 client.login(config.token);
