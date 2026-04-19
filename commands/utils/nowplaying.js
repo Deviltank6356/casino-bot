@@ -1,55 +1,56 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { getNowPlaying } = require("../../services/spotify");
+const { getUserSpotify } = require("../../services/spotifyUsers");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("nowplaying")
-    .setDescription("Show Spotify current track"),
+    .setDescription("Show what a user is listening to on Spotify")
+    .addUserOption(opt =>
+      opt.setName("user")
+        .setDescription("User to check (defaults to you)")
+        .setRequired(false)
+    ),
 
   async execute(i) {
     try {
-      const track = await getNowPlaying();
+      const target = i.options.getUser("user") || i.user;
 
-      // ❌ Spotify error (token / API / config issue)
-      if (!track || track.status === "error") {
-        return i.reply({
-          content: "❌ Spotify connection error. Try relinking.",
-          flags: 64 // replaces deprecated ephemeral
-        });
-      }
+      const track = await getUserSpotify(target.id);
 
-      // 🎧 Nothing playing (NORMAL case)
-      if (track.status === "none") {
+      // ❌ not linked
+      if (!track) {
         return i.reply({
-          content: "🎧 Nothing is currently playing.",
+          content: `❌ ${target.username} has not linked Spotify.`,
           flags: 64
         });
       }
 
-      // ⏸️ Paused
-      if (!track.isPlaying) {
+      // 🎧 nothing playing
+      if (!track.item) {
         return i.reply({
-          content:
-            `⏸️ **Paused**\n` +
-            `🎵 ${track.name}\n` +
-            `👤 ${track.artist}\n` +
-            `🔗 ${track.url || "No link"}`,
+          content: `🎧 ${target.username} is not listening to anything.`,
           flags: 64
         });
       }
 
-      // ✅ Playing
+      const song = track.item.name || "Unknown";
+      const artist =
+        track.item.artists?.map(a => a.name).join(", ") || "Unknown";
+      const url = track.item.external_urls?.spotify || null;
+      const isPlaying = track.is_playing;
+
       return i.reply({
         content:
-          `🎧 **Now Playing**\n` +
-          `🎵 ${track.name}\n` +
-          `👤 ${track.artist}\n` +
-          `🔗 ${track.url || "No link"}\n` +
-          `🟢 Playing`
+          `🎧 **${target.username} is listening to:**\n` +
+          `🎵 ${song}\n` +
+          `👤 ${artist}\n` +
+          `🔗 ${url || "No link"}\n` +
+          `${isPlaying ? "🟢 Live" : "⏸️ Paused"}`,
+        flags: 64
       });
 
     } catch (err) {
-      console.error("Spotify command error:", err);
+      console.error("NOWPLAYING ERROR:", err);
 
       return i.reply({
         content: "❌ Spotify system error",

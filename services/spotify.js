@@ -1,98 +1,151 @@
 const SpotifyWebApi = require("spotify-web-api-node");
 const config = require("../config.json");
+const { getUser } = require("../db");
+const client = require("../client"); // your discord client
 
 let lastRefresh = 0;
+let lastTrackMap = new Map(); // userId → trackId
 
 // =============================
-// INIT SPOTIFY CLIENT
+// INIT CLIENT
 // =============================
 const spotify = new SpotifyWebApi({
   clientId: config.spotify.clientId,
-  clientSecret: config.spotify.clientSecret
+  clientSecret: config.spotify.clientSecret,
+  refreshToken: config.spotify.refreshToken
 });
 
-// ALWAYS ensure refresh token is applied
-spotify.setRefreshToken(config.spotify.refreshToken);
-
-// =============================
-// DEBUG LOGGER
-// =============================
-function logSpotifyError(err) {
-  console.error("❌ SPOTIFY FULL DEBUG:");
-  console.dir(err, { depth: 5 });
+// apply refresh token immediately
+if (config.spotify.refreshToken) {
+  spotify.setRefreshToken(config.spotify.refreshToken);
 }
 
 // =============================
-// REFRESH TOKEN
+// INIT SPOTIFY
+// =============================
+async function initSpotify() {
+  try {
+    if (!config.spotify.refreshToken) {
+      console.error("❌ Missing refresh token");
+      return;
+    }
+
+    const data = await spotify.refreshAccessToken();
+    const token = data?.body?.access_token;
+
+    if (!token) {
+      console.error("❌ Failed to init Spotify");
+      return;
+    }
+
+    spotify.setAccessToken(token);
+    lastRefresh = Date.now();
+
+    console.log("✅ Spotify initialized");
+
+  } catch (err) {
+    console.error("❌ Spotify init failed:", err?.message || err);
+  }
+}
+
+initSpotify();
+
+// =============================
+// REFRESH TOKEN (SAFE)
 // =============================
 async function refreshToken() {
   try {
-    const refreshToken = config.spotify.refreshToken;
-
-    if (!refreshToken) {
-      console.error("❌ Missing Spotify refresh token in config");
-      return false;
-    }
-
     const now = Date.now();
 
-    if (now - lastRefresh < 300000) return true;
+    if (!spotify.getRefreshToken()) return false;
 
-    const data = await spotify.refreshAccessToken();
-
-    const accessToken = data?.body?.access_token;
-
-    if (!accessToken) {
-      console.error("❌ No access token returned from Spotify");
-      return false;
+    if (now - lastRefresh < 300000 && spotify.getAccessToken()) {
+      return true;
     }
 
-    spotify.setAccessToken(accessToken);
+    const data = await spotify.refreshAccessToken();
+    const token = data?.body?.access_token;
 
+    if (!token) return false;
+
+    spotify.setAccessToken(token);
     lastRefresh = now;
 
     return true;
 
   } catch (err) {
-    logSpotifyError(err);
+    console.error("Spotify refresh error:", err?.message || err);
     return false;
   }
 }
 
 // =============================
-// NOW PLAYING
+// FETCH CURRENT TRACK (RAW)
 // =============================
-async function getNowPlaying() {
+async function fetchTrack() {
+  const res = await spotify.getMyCurrentPlayingTrack();
+
+  if (!res?.body) return null;
+  if (!res.body.item) return null;
+
+  return res.body;
+}
+
+// =============================
+// REAL-TIME LOOP (THIS IS THE KEY)
+// =============================
+async function tick() {
   try {
-    const ok = await refreshToken();
+    await refreshToken();
 
-    if (!ok) return { status: "error" };
+    const users = Array.from(lastTrackMap.keys());
 
-    if (!spotify.getAccessToken()) {
-      const refreshed = await refreshToken();
-      if (!refreshed) return { status: "error" };
+    for (const userId of users) {
+      const user = getUser(userId);
+
+      if (!user?.spotifyLinked) continue;
+
+      const trackData = await fetchTrack();
+      if (!trackData?.item) continue;
+
+      const newId = trackData.item.id;
+      const oldId = lastTrackMap.get(userId);
+
+      // no change → ignore
+      if (newId === oldId) continue;
+
+      lastTrackMap.set(userId, newId);
+
+      const channel = client.channels.cache.get(user.lastChannelId);
+      if (!channel) continue;
+
+      channel.send({
+        content:
+          `🎧 **Live Now Playing**\n` +
+          `👤 <@${userId}>\n` +
+          `🎵 ${trackData.item.name}\n` +
+          `🎤 ${trackData.item.artists.map(a => a.name).join(", ")}`
+      });
     }
-
-    const res = await spotify.getMyCurrentPlayingTrack();
-
-    if (!res?.body?.item) {
-      return { status: "none" };
-    }
-
-    const item = res.body.item;
-
-    return {
-      status: "ok",
-      name: item.name,
-      artist: item.artists?.map(a => a.name).join(", ") || "Unknown",
-      url: item.external_urls?.spotify || null,
-      isPlaying: Boolean(res.body.is_playing)
-    };
 
   } catch (err) {
-    logSpotifyError(err);
-    return { status: "error" };
+    console.error("Spotify tick error:", err?.message || err);
   }
 }
 
-module.exports = { getNowPlaying };
+// run every 15 seconds (REAL-TIME FEEL)
+setInterval(tick, 15000);
+
+// =============================
+// REGISTER USER FOR LIVE UPDATES
+// =============================
+function registerUser(userId) {
+  lastTrackMap.set(userId, null);
+}
+
+// =============================
+// EXPORTS
+// =============================
+module.exports = {
+  registerUser
+};
