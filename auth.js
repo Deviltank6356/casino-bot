@@ -2,13 +2,14 @@ const express = require("express");
 const SpotifyWebApi = require("spotify-web-api-node");
 const path = require("path");
 const Database = require("better-sqlite3");
-const config = require("./config.json");
 
 const app = express();
 const db = new Database(path.join(__dirname, "casino.db"));
 
+const CONFIG_PATH = path.join(__dirname, "config.json");
+
 // =============================
-// TABLE (CLEAN + SAFE)
+// DB TABLE
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS spotify_tokens (
@@ -20,13 +21,17 @@ CREATE TABLE IF NOT EXISTS spotify_tokens (
 `).run();
 
 // =============================
-// SPOTIFY CLIENT
+// SPOTIFY CLIENT FACTORY
 // =============================
-const spotify = new SpotifyWebApi({
-  clientId: config.spotify.clientId,
-  clientSecret: config.spotify.clientSecret,
-  redirectUri: config.spotify.redirectUri
-});
+function createSpotify() {
+  const config = require("./config.json");
+
+  return new SpotifyWebApi({
+    clientId: config.spotify.clientId,
+    clientSecret: config.spotify.clientSecret,
+    redirectUri: config.spotify.redirectUri
+  });
+}
 
 // =============================
 // LOGIN ROUTE
@@ -38,23 +43,21 @@ app.get("/login", (req, res) => {
     return res.status(400).send("Missing Discord user ID");
   }
 
+  const spotify = createSpotify();
+
   const scopes = [
     "user-read-currently-playing",
     "user-read-playback-state",
     "user-read-recently-played"
   ];
 
-  const url = spotify.createAuthorizeURL(
-    scopes,
-    userId,
-    true
-  );
+  const url = spotify.createAuthorizeURL(scopes, userId, true);
 
   res.redirect(url);
 });
 
 // =============================
-// CALLBACK ROUTE (FIXED FLOW)
+// CALLBACK ROUTE
 // =============================
 app.get("/callback", async (req, res) => {
   try {
@@ -64,22 +67,22 @@ app.get("/callback", async (req, res) => {
       return res.status(400).send("Missing code or state");
     }
 
-    // exchange code → tokens
+    const spotify = createSpotify();
+
     const data = await spotify.authorizationCodeGrant(code);
 
-    const refreshToken = data?.body?.refresh_token;
-    const accessToken = data?.body?.access_token;
-    const expiresIn = data?.body?.expires_in;
+    const accessToken = data.body.access_token;
+    const refreshToken = data.body.refresh_token;
+    const expiresIn = data.body.expires_in;
 
-    if (!refreshToken || !accessToken) {
+    if (!accessToken || !refreshToken) {
       return res.status(500).send("Invalid Spotify response");
     }
 
-    // IMPORTANT: set BOTH tokens before verification
     spotify.setAccessToken(accessToken);
     spotify.setRefreshToken(refreshToken);
 
-    // VERIFY ACCOUNT
+    // verify account
     const me = await spotify.getMe().catch(() => null);
 
     if (!me) {
@@ -88,7 +91,9 @@ app.get("/callback", async (req, res) => {
 
     const expiresAt = Date.now() + expiresIn * 1000;
 
-    // SAVE PER USER
+    // =============================
+    // SAVE USER PROPERLY
+    // =============================
     db.prepare(`
       INSERT OR REPLACE INTO spotify_tokens
       (userId, refreshToken, accessToken, expiresAt)
@@ -105,13 +110,7 @@ app.get("/callback", async (req, res) => {
     res.send("Spotify linked successfully ✔ You can close this tab.");
 
   } catch (err) {
-    console.error("❌ Spotify auth error:");
-    console.dir({
-      message: err?.message,
-      body: err?.body,
-      status: err?.statusCode
-    }, { depth: 5 });
-
+    console.error("❌ Spotify auth error:", err?.body || err.message || err);
     res.status(500).send("Auth failed");
   }
 });
@@ -124,9 +123,9 @@ app.get("/", (req, res) => {
 });
 
 // =============================
-// START SERVER
+// START
 // =============================
 app.listen(3000, "0.0.0.0", () => {
-  console.log("🚀 Spotify auth server running");
-  console.log(`Login URL: https://echo-told-eleven-collection.trycloudflare.com/login`);
+  console.log("🚀 Spotify auth running");
+  console.log("Login URL: /login?user=DISCORD_ID");
 });
