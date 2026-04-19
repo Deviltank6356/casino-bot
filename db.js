@@ -4,7 +4,7 @@ const config = require("./config.json");
 const db = new Database("casino.db");
 
 // =============================
-// CONSTANT DEFAULTS
+// DEFAULTS
 // =============================
 const DEFAULT_STREAKS = {
   daily: { count: 0, last: 0 },
@@ -23,7 +23,7 @@ const DEFAULT_USER = () => ({
 });
 
 // =============================
-// TABLE SETUP
+// TABLE SETUP (SAFE MIGRATION)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -38,41 +38,43 @@ CREATE TABLE IF NOT EXISTS users (
 )
 `).run();
 
+// 🔥 AUTO-FIX OLD DATABASES (IMPORTANT)
+try {
+  db.prepare(`ALTER TABLE users ADD COLUMN claims TEXT DEFAULT '{}'`).run();
+} catch (_) {}
+
+try {
+  db.prepare(`ALTER TABLE users ADD COLUMN streaks TEXT DEFAULT '{}'`).run();
+} catch (_) {}
+
 // =============================
-// SAFE JSON PARSE
+// SAFE JSON
 // =============================
 function safeParse(input, fallback = {}) {
   try {
-    return JSON.parse(input || "{}");
+    return input ? JSON.parse(input) : fallback;
   } catch {
     return fallback;
   }
 }
 
 // =============================
-// NORMALIZE DATA (VERY IMPORTANT)
+// NORMALIZE USER
 // =============================
 function normalizeUser(user) {
+  const streaks = safeParse(user.streaks, {});
+
   return {
-    ...user,
+    id: user.id,
     money: user.money ?? 0,
     xp: user.xp ?? 0,
     level: user.level ?? 0,
     bank: user.bank ?? 0,
     claims: safeParse(user.claims, {}),
     streaks: {
-      daily: {
-        ...DEFAULT_STREAKS.daily,
-        ...(safeParse(user.streaks).daily || {})
-      },
-      weekly: {
-        ...DEFAULT_STREAKS.weekly,
-        ...(safeParse(user.streaks).weekly || {})
-      },
-      monthly: {
-        ...DEFAULT_STREAKS.monthly,
-        ...(safeParse(user.streaks).monthly || {})
-      }
+      daily: { ...DEFAULT_STREAKS.daily, ...(streaks.daily || {}) },
+      weekly: { ...DEFAULT_STREAKS.weekly, ...(streaks.weekly || {}) },
+      monthly: { ...DEFAULT_STREAKS.monthly, ...(streaks.monthly || {}) }
     },
     joinedAt: user.joinedAt ?? Date.now()
   };
