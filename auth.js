@@ -8,7 +8,7 @@ const app = express();
 const db = new Database(path.join(__dirname, "casino.db"));
 
 // =============================
-// TABLE (SAFE + INDEXED)
+// TABLE (CLEAN + SAFE)
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS spotify_tokens (
@@ -47,14 +47,14 @@ app.get("/login", (req, res) => {
   const url = spotify.createAuthorizeURL(
     scopes,
     userId,
-    true // force consent
+    true
   );
 
   res.redirect(url);
 });
 
 // =============================
-// CALLBACK ROUTE (HARDENED)
+// CALLBACK ROUTE (FIXED FLOW)
 // =============================
 app.get("/callback", async (req, res) => {
   try {
@@ -75,19 +75,20 @@ app.get("/callback", async (req, res) => {
       return res.status(500).send("Invalid Spotify response");
     }
 
-    // set token for verification
+    // IMPORTANT: set BOTH tokens before verification
     spotify.setAccessToken(accessToken);
+    spotify.setRefreshToken(refreshToken);
 
-    // VERIFY TOKEN WORKS (prevents 403 issues later)
+    // VERIFY ACCOUNT
     const me = await spotify.getMe().catch(() => null);
 
     if (!me) {
       return res.status(500).send("Spotify verification failed");
     }
 
-    const expiresAt = Date.now() + (expiresIn * 1000);
+    const expiresAt = Date.now() + expiresIn * 1000;
 
-    // store per user safely
+    // SAVE PER USER
     db.prepare(`
       INSERT OR REPLACE INTO spotify_tokens
       (userId, refreshToken, accessToken, expiresAt)
@@ -116,7 +117,7 @@ app.get("/callback", async (req, res) => {
 });
 
 // =============================
-// HEALTH CHECK (IMPORTANT FOR TUNNELS)
+// HEALTH CHECK
 // =============================
 app.get("/", (req, res) => {
   res.send("Spotify auth server running ✔");
@@ -127,8 +128,5 @@ app.get("/", (req, res) => {
 // =============================
 app.listen(3000, "0.0.0.0", () => {
   console.log("🚀 Spotify auth server running");
-
-  console.log(
-    `Login URL: https://YOUR-TUNNEL.trycloudflare.com/login?user=DISCORD_USER_ID`
-  );
+  console.log(`Login URL: https://echo-told-eleven-collection.trycloudflare.com/login`);
 });

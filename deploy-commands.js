@@ -7,13 +7,15 @@ const commands = [];
 const seen = new Set();
 
 // =============================
-// LOAD COMMANDS
+// LOAD COMMANDS (DEBUG VERSION)
 // =============================
 function loadCommands(dir) {
   const files = fs.readdirSync(dir);
 
   for (const file of files) {
     const fullPath = path.join(dir, file);
+
+    console.log(`📂 Checking: ${fullPath}`);
 
     try {
       const stat = fs.lstatSync(fullPath);
@@ -23,23 +25,36 @@ function loadCommands(dir) {
         continue;
       }
 
-      if (!file.endsWith(".js")) continue;
+      if (!file.endsWith(".js")) {
+        console.log(`⏭️ SKIP (not js): ${file}`);
+        continue;
+      }
 
-      // clear cache (important for PM2)
       delete require.cache[require.resolve(fullPath)];
 
-      const command = require(fullPath);
+      let command;
+      try {
+        command = require(fullPath);
+      } catch (e) {
+        console.error(`💥 REQUIRE FAILED: ${fullPath}`);
+        console.error(e);
+        continue;
+      }
 
-      // =============================
-      // VALIDATION 1: structure
-      // =============================
-      if (!command || !command.data) {
-        console.warn(`⚠️ SKIP (no command.data): ${fullPath}`);
+      console.log(`📦 LOADED FILE: ${file}`, command);
+
+      if (!command) {
+        console.warn(`⚠️ EMPTY EXPORT: ${fullPath}`);
+        continue;
+      }
+
+      if (!command.data) {
+        console.warn(`⚠️ NO DATA EXPORT: ${fullPath}`);
         continue;
       }
 
       if (typeof command.data.toJSON !== "function") {
-        console.warn(`⚠️ SKIP (no toJSON): ${fullPath}`);
+        console.warn(`⚠️ INVALID SlashCommandBuilder: ${fullPath}`);
         continue;
       }
 
@@ -47,40 +62,29 @@ function loadCommands(dir) {
       try {
         json = command.data.toJSON();
       } catch (e) {
-        console.error(`❌ toJSON ERROR: ${fullPath}`, e);
+        console.error(`❌ toJSON CRASH: ${fullPath}`, e);
         continue;
       }
 
       if (!json?.name) {
-        console.warn(`⚠️ SKIP (missing name): ${fullPath}`);
+        console.warn(`⚠️ NO NAME: ${fullPath}`);
         continue;
       }
 
-      // =============================
-      // VALIDATION 2: normalize name
-      // =============================
       const name = json.name.toLowerCase().trim();
 
-      if (!/^[a-z0-9-]+$/.test(name)) {
-        console.error(`❌ INVALID COMMAND NAME (must be lowercase, no spaces): ${name} (${fullPath})`);
-        continue;
-      }
-
-      // =============================
-      // VALIDATION 3: duplicates
-      // =============================
       if (seen.has(name)) {
-        console.error(`❌ DUPLICATE IGNORED: ${name} (${fullPath})`);
+        console.error(`❌ DUPLICATE: ${name}`);
         continue;
       }
 
       seen.add(name);
       commands.push(json);
 
-      console.log(`✅ LOADED: ${name} (${file})`);
+      console.log(`✅ LOADED COMMAND: ${name}`);
 
     } catch (err) {
-      console.error(`💥 FAILED FILE: ${fullPath}`, err);
+      console.error(`💥 FILE ERROR: ${fullPath}`, err);
     }
   }
 }
@@ -89,36 +93,21 @@ function loadCommands(dir) {
 loadCommands(path.join(__dirname, "commands"));
 
 // =============================
-// FINAL SAFETY DEDUPLICATION
-// =============================
-const unique = [];
-const final = new Set();
-
-for (const cmd of commands) {
-  if (!cmd?.name) continue;
-
-  const name = cmd.name.toLowerCase().trim();
-
-  if (final.has(name)) {
-    console.error(`❌ FINAL DROP DUPLICATE: ${name}`);
-    continue;
-  }
-
-  final.add(name);
-  unique.push(cmd);
-}
-
-// =============================
 const rest = new REST({ version: "10" }).setToken(config.token);
 
 // =============================
 (async () => {
   try {
-    console.log(`🚀 Deploying ${unique.length} commands...`);
+    console.log(`🚀 FINAL COMMAND COUNT: ${commands.length}`);
+
+    if (commands.length === 0) {
+      console.error("❌ NO COMMANDS LOADED — CHECK FILE STRUCTURE");
+      return;
+    }
 
     const result = await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
-      { body: unique }
+      { body: commands }
     );
 
     console.log(`✅ DEPLOYED: ${result.length} commands`);
