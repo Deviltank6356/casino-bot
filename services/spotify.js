@@ -10,7 +10,21 @@ const spotify = new SpotifyWebApi({
 let lastRefresh = 0;
 
 // =============================
-// REFRESH TOKEN (SAFE)
+// DEBUG LOGGER
+// =============================
+function logSpotifyError(err) {
+  console.error("❌ SPOTIFY FULL DEBUG:");
+  console.error(JSON.stringify({
+    message: err?.message,
+    body: err?.body,
+    statusCode: err?.statusCode,
+    stack: err?.stack,
+    raw: err
+  }, null, 2));
+}
+
+// =============================
+// REFRESH TOKEN
 // =============================
 async function refreshToken() {
   try {
@@ -37,13 +51,7 @@ async function refreshToken() {
     return true;
 
   } catch (err) {
-    console.error("❌ Spotify refresh error FULL:", {
-      message: err?.message,
-      body: err?.body,
-      status: err?.statusCode,
-      stack: err?.stack
-    });
-
+    logSpotifyError(err);
     return false;
   }
 }
@@ -78,15 +86,10 @@ async function getNowPlaying() {
       isPlaying: Boolean(res.body.is_playing)
     };
 
-  function logSpotifyError(err) {
-  console.error("❌ SPOTIFY FULL DEBUG:");
-  console.error(JSON.stringify({
-    message: err?.message,
-    body: err?.body,
-    statusCode: err?.statusCode,
-    stack: err?.stack,
-    raw: err
-  }, null, 2));
+  } catch (err) {
+    logSpotifyError(err);
+    return { status: "error" };
+  }
 }
 
 module.exports = { getNowPlaying };
