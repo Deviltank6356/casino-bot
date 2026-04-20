@@ -10,7 +10,7 @@ const client = new Client({
 client.commands = new Collection();
 
 // =============================
-// LOAD COMMANDS (SAFE + DEDUPED)
+// LOAD COMMANDS (SAFE)
 // =============================
 function loadCommands(dir) {
   if (!fs.existsSync(dir)) return;
@@ -33,77 +33,82 @@ function loadCommands(dir) {
       const cmd = require(fullPath);
 
       if (!cmd?.data || !cmd?.execute) {
-        console.log(`⚠️ Skipped invalid command: ${file}`);
+        console.log(`⚠️ Invalid command skipped: ${file}`);
         continue;
       }
 
       let name;
-
       try {
-        name = cmd.data.toJSON().name;
+        name = cmd.data.name || cmd.data.toJSON().name;
       } catch {
-        console.log(`⚠️ Failed to parse command: ${file}`);
+        console.log(`⚠️ Failed parsing command: ${file}`);
         continue;
       }
 
-      if (!name) {
-        console.log(`⚠️ Missing name in: ${file}`);
-        continue;
-      }
+      if (!name) continue;
 
       const key = name.toLowerCase();
 
-      // 🔥 HARD DUPLICATE PREVENTION
       if (client.commands.has(key)) {
-        console.error(`❌ Duplicate command blocked: ${key}`);
+        console.error(`❌ Duplicate blocked: ${key}`);
         continue;
       }
 
       client.commands.set(key, cmd);
-      console.log(`✅ Loaded command: ${key}`);
+      console.log(`✅ Loaded: ${key}`);
 
     } catch (err) {
-      console.error(`❌ Failed loading ${file}:`, err);
+      console.error(`❌ Load error ${file}:`, err);
     }
   }
 }
 
-// =============================
 loadCommands(path.join(__dirname, "commands"));
 
 // =============================
-// READY EVENT
+// READY
 // =============================
 client.once("ready", () => {
-  console.log(`🚀 Casino bot online as ${client.user.tag}`);
+  console.log(`🚀 Online as ${client.user.tag}`);
 });
 
 // =============================
-// INTERACTION HANDLER
+// INTERACTIONS (FIXED CORE BUG)
 // =============================
-client.on("interactionCreate", async (i) => {
-  if (!i.isChatInputCommand()) return;
-
-  const cmd = client.commands.get(i.commandName.toLowerCase());
-
-  if (!cmd) {
-    return i.reply({
-      content: "❌ Command not found",
-      flags: 64
-    });
-  }
-
+client.on("interactionCreate", async (interaction) => {
   try {
-    await cmd.execute(i, client);
 
-  } catch (err) {
-    console.error(`❌ Command error (${i.commandName}):`, err);
+    // =============================
+    // SLASH COMMANDS ONLY
+    // =============================
+    if (!interaction.isChatInputCommand()) return;
 
-    if (!i.replied && !i.deferred) {
-      return i.reply({
-        content: "❌ Error executing command",
+    const cmd = client.commands.get(interaction.commandName.toLowerCase());
+
+    if (!cmd) {
+      return interaction.reply({
+        content: "❌ Command not found",
         flags: 64
       });
+    }
+
+    // =============================
+    // EXECUTION SAFETY
+    // =============================
+    await cmd.execute(interaction, client);
+
+  } catch (err) {
+    console.error(`❌ Interaction error:`, err);
+
+    try {
+      if (interaction.replied || interaction.deferred) return;
+
+      await interaction.reply({
+        content: "❌ Unexpected error executing command",
+        flags: 64
+      });
+    } catch (e) {
+      console.error("❌ Failed to send error reply:", e);
     }
   }
 });
