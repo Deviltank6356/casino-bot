@@ -22,19 +22,12 @@ module.exports = {
 
     const target = interaction.options.getUser("user");
 
-    const fresh = {
-      money: Number(config.startingMoney ?? 0),
-      xp: Number(config.startingXP ?? 0),
-      level: Number(config.startingLevel ?? 0),
-      bank: Number(config.startingBank ?? 0)
-    };
-
     db.prepare(`
       UPDATE users SET
-        money = ?,
-        xp = ?,
-        level = ?,
-        bank = ?,
+        money = 0,
+        xp = 0,
+        level = 0,
+        bank = 0,
         claims = '{}',
         streaks = '{}',
         started = 0,
@@ -42,13 +35,7 @@ module.exports = {
         spotifyRefreshToken = NULL,
         lastChannelId = NULL
       WHERE id = ?
-    `).run(
-      fresh.money,
-      fresh.xp,
-      fresh.level,
-      fresh.bank,
-      target.id
-    );
+    `).run(target.id);
 
     return interaction.reply(`🧨 Fully reset ${target.username}`);
   }
