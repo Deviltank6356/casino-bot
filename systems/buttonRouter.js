@@ -5,12 +5,8 @@ const roulette = require("../games/rouletteManager");
 // BUTTON ROUTES
 // =============================
 const routes = {
-  // 🃏 Blackjack
   hit: blackjack.hit,
-  stand: blackjack.stand,
-
-  // 🎡 Roulette (single entry point)
-  r: roulette.handle
+  stand: blackjack.stand
 };
 
 // =============================
@@ -18,6 +14,8 @@ const routes = {
 // =============================
 async function handleButton(i) {
   try {
+    if (!i.customId) return false;
+
     const parts = i.customId.split("_");
     const action = parts[0];
 
@@ -32,28 +30,23 @@ async function handleButton(i) {
       if (userId && userId !== i.user.id) {
         return i.reply({
           content: "❌ This is not your game",
-          ephemeral: true
+          flags: 64
         });
       }
 
       const gameFn = routes[action];
       if (!gameFn) return false;
 
-      return gameFn(i.user.id);
+      // 🔥 FIX: pass interaction, not userId
+      return gameFn(i);
     }
 
     // =============================
     // ROULETTE
-    // r_red_100
-    // r_black_50
-    // r_even_200
+    // r_red_100 etc
     // =============================
     if (action === "r") {
-      const rouletteHandler = routes.r;
-
-      if (!rouletteHandler) return false;
-
-      return rouletteHandler(i);
+      return roulette.handle(i);
     }
 
     return false;
@@ -61,11 +54,15 @@ async function handleButton(i) {
   } catch (err) {
     console.error("BUTTON ROUTER ERROR:", err);
 
-    if (!i.replied && !i.deferred) {
+    try {
+      if (i.replied || i.deferred) return;
+
       return i.reply({
         content: "❌ Button system error",
-        ephemeral: true
+        flags: 64
       });
+    } catch (e) {
+      console.error("BUTTON FAILSAFE ERROR:", e);
     }
   }
 }

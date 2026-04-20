@@ -1,33 +1,19 @@
 const map = new Map();
 
-const DEFAULT_COOLDOWN = 10000;
-
-// =============================
-// CLEANUP (runs every 30s)
-// =============================
-setInterval(() => {
-  if (map.size === 0) return;
-
-  const now = Date.now();
-
-  for (const [key, expire] of map) {
-    if (expire <= now) {
-      map.delete(key);
-    }
-  }
-}, 30000);
+const DEFAULT_COOLDOWN = 10000; // 10 seconds
 
 // =============================
 // CHECK COOLDOWN
+// returns remaining ms OR null
 // =============================
 function check(userId, cmd, cooldown = DEFAULT_COOLDOWN) {
   if (!userId || !cmd) return null;
 
-  cooldown = Number(cooldown);
-  if (!Number.isFinite(cooldown) || cooldown < 0) cooldown = DEFAULT_COOLDOWN;
-
   const key = `${userId}:${cmd}`;
   const now = Date.now();
+
+  const cd = Number(cooldown);
+  const finalCooldown = Number.isFinite(cd) && cd > 0 ? cd : DEFAULT_COOLDOWN;
 
   const expire = map.get(key);
 
@@ -36,9 +22,22 @@ function check(userId, cmd, cooldown = DEFAULT_COOLDOWN) {
     return expire - now;
   }
 
-  // set new cooldown
-  map.set(key, now + cooldown);
+  // set cooldown
+  map.set(key, now + finalCooldown);
   return null;
 }
+
+// =============================
+// CLEANUP (optimized)
+// =============================
+setInterval(() => {
+  const now = Date.now();
+
+  for (const [key, expire] of map) {
+    if (expire <= now) {
+      map.delete(key);
+    }
+  }
+}, 60000); // every 60s is enough (30s is unnecessary spam)
 
 module.exports = { check };
