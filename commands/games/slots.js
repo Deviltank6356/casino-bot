@@ -41,13 +41,13 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ FIXED: correct requireStart usage
-      if (!requireStart(interaction)) return;
-
       const user = getUser(interaction.user.id);
+
+      // ✅ FIXED START CHECK
+      if (!requireStart(user, interaction)) return;
+
       const bet = interaction.options.getInteger("bet");
 
-      // BET VALIDATION
       if (!Number.isInteger(bet) || bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet amount",
@@ -62,24 +62,36 @@ module.exports = {
         });
       }
 
-      await interaction.reply("🎰 Spinning the slots...");
+      let a = "❔", b = "❔", c = "❔";
 
-      let a, b, c;
+      // initial embed
+      const embed = new EmbedBuilder()
+        .setTitle("🎰 Slots Machine")
+        .setColor(0x2b2d31)
+        .setDescription(`Spinning...\n\n│ ${a} │ ${b} │ ${c} │`)
+        .addFields(
+          { name: "💰 Bet", value: `${bet}`, inline: true }
+        );
 
-      // ANIMATION
+      await interaction.reply({ embeds: [embed] });
+
+      // =============================
+      // ANIMATION (EDIT EMBED ONLY)
+      // =============================
       for (let i = 0; i < 5; i++) {
         a = roll().emoji;
         b = roll().emoji;
         c = roll().emoji;
 
-        await interaction.editReply(
-          `🎰 **SLOTS**\n━━━━━━━━━━━━━━\n│ ${a} │ ${b} │ ${c} │\n━━━━━━━━━━━━━━`
-        );
+        embed.setDescription(`🎰 Spinning...\n\n│ ${a} │ ${b} │ ${c} │`);
 
-        await sleep(300);
+        await interaction.editReply({ embeds: [embed] });
+        await sleep(400);
       }
 
-      // WIN LOGIC
+      // =============================
+      // RESULT
+      // =============================
       let win = false;
       let multiplier = 0;
 
@@ -92,34 +104,31 @@ module.exports = {
       const change = win ? bet * multiplier : -bet;
 
       user.money = Number(user.money ?? 0) + change;
-
       saveUser(user);
 
-      const embed = new EmbedBuilder()
-        .setTitle("🎰 Slots")
+      // FINAL EMBED
+      const finalEmbed = new EmbedBuilder()
+        .setTitle("🎰 Slots Result")
         .setColor(win ? 0x00ff00 : 0xff0000)
+        .setDescription(`│ ${a} │ ${b} │ ${c} │`)
         .addFields(
-          { name: "🎲 Result", value: `│ ${a} │ ${b} │ ${c} │` },
           { name: "💰 Bet", value: `${bet}`, inline: true },
           { name: "📊 Change", value: `${change >= 0 ? "+" : ""}${change}`, inline: true },
-          { name: "🎯 Outcome", value: win ? "🟢 WIN" : "🔴 LOSE" }
+          { name: "🎯 Outcome", value: win ? "🟢 WIN" : "🔴 LOSE", inline: false }
         )
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [finalEmbed] });
 
     } catch (err) {
       console.error("SLOTS ERROR:", err);
 
-      const payload = {
-        content: "❌ Slots crashed safely"
-      };
-
-      if (interaction.replied || interaction.deferred) {
-        return interaction.followUp(payload);
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Slots crashed safely",
+          ephemeral: true
+        });
       }
-
-      return interaction.reply(payload);
     }
   }
 };

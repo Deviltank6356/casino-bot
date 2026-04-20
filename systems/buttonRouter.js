@@ -1,48 +1,71 @@
 const blackjack = require("../games/blackjackManager");
 const roulette = require("../games/rouletteManager");
-
-const routes = {
-  hit: blackjack.hit,
-  stand: blackjack.stand,
-  r: roulette.handle
-};
+const { checkButtonCooldown } = require("../utils/buttonCooldown");
 
 async function handleButton(i) {
   try {
-    const parts = i.customId.split("_");
+    const parts = i.customId.split(":");
+
     const action = parts[0];
+    const type = parts[1];
+    const bet = parts[2];
+    const ownerId = parts[3];
 
     // =============================
-    // BLACKJACK FIX
+    // 🛑 ANTI-SPAM (RUN FIRST)
+    // =============================
+    const cd = checkButtonCooldown(i.user.id, action, 2000);
+    if (cd) {
+      return i.reply({
+        content: `⏳ Slow down! Wait ${Math.ceil(cd / 1000)}s`,
+        ephemeral: true
+      });
+    }
+
+    // =============================
+    // 🔒 OWNER CHECK (GAME LOCK)
+    // =============================
+    if (ownerId && ownerId !== i.user.id) {
+      return i.reply({
+        content: "❌ This is not your game",
+        ephemeral: true
+      });
+    }
+
+    // =============================
+    // 🃏 BLACKJACK
     // =============================
     if (action === "hit" || action === "stand") {
-      const userId = parts[1];
+      const fn = blackjack[action];
 
-      if (userId && userId !== i.user.id) {
+      if (!fn) {
         return i.reply({
-          content: "❌ This is not your game",
+          content: "❌ Blackjack action missing",
           ephemeral: true
         });
       }
 
-      const gameFn = routes[action];
-      if (!gameFn) return false;
-
-      // 🔥 IMPORTANT FIX: await + pass interaction
-      return await gameFn(i);
+      // IMPORTANT: let handler fully control interaction
+      return await fn(i);
     }
 
     // =============================
-    // ROULETTE
+    // 🎡 ROULETTE
     // =============================
     if (action === "r") {
-      return await routes.r(i);
+      return await roulette.handle(i);
     }
 
-    return false;
+    // =============================
+    // ❌ UNKNOWN BUTTON
+    // =============================
+    return i.reply({
+      content: "❌ Unknown button",
+      ephemeral: true
+    });
 
   } catch (err) {
-    console.error("BUTTON ROUTER ERROR:", err);
+    console.error("BUTTON ERROR:", err);
 
     try {
       if (!i.replied && !i.deferred) {

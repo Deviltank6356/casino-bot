@@ -1,21 +1,36 @@
 const boosts = [];
 
 // =============================
-// ADD BOOST (SAFE)
+// ADD BOOST (SAFE + CONTROLLED)
 // =============================
 function addMultiplier(value, durationMs) {
-  if (!Number.isFinite(value) || value <= 0) return;
+  value = Number(value);
+  durationMs = Number(durationMs);
+
+  // validation
+  if (!Number.isFinite(value) || value <= 0) return false;
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return false;
+
+  // anti exploit cap (prevents x1000 spam abuse)
+  const MAX_MULTIPLIER = 10;
+  if (value > MAX_MULTIPLIER) value = MAX_MULTIPLIER;
 
   boosts.push({
     value,
     expiresAt: Date.now() + durationMs
   });
+
+  return true;
 }
 
 // =============================
-// REMOVE BOOST (ALL MATCHES)
+// REMOVE BOOST (SAFE)
 // =============================
 function removeMultiplier(value) {
+  value = Number(value);
+
+  if (!Number.isFinite(value)) return;
+
   for (let i = boosts.length - 1; i >= 0; i--) {
     if (boosts[i].value === value) {
       boosts.splice(i, 1);
@@ -37,7 +52,7 @@ function cleanup() {
 }
 
 // =============================
-// GET MULTIPLIER
+// GET MULTIPLIER (SAFE STACK LIMIT)
 // =============================
 function getMultiplier() {
   cleanup();
@@ -45,12 +60,17 @@ function getMultiplier() {
   let total = 1;
 
   for (const b of boosts) {
-    if (Number.isFinite(b.value) && b.value > 0) {
-      total *= b.value;
+    const val = Number(b.value);
+
+    if (Number.isFinite(val) && val > 0) {
+      total *= val;
     }
   }
 
-  return total;
+  // safety cap (prevents economy breaking multipliers)
+  const MAX_TOTAL_MULTIPLIER = 25;
+
+  return Math.min(total, MAX_TOTAL_MULTIPLIER);
 }
 
 module.exports = {

@@ -12,18 +12,14 @@ const { getUser } = require("../../db");
 const activeGames = new Map();
 
 // =============================
-// SAFE START CHECK
+// START CHECK
 // =============================
-function hasStarted(user) {
-  return Number(user?.started) === 1;
-}
-
 function requireStart(user, interaction) {
-  if (!hasStarted(user)) {
+  if (Number(user?.started) !== 1) {
     if (!interaction.replied && !interaction.deferred) {
       interaction.reply({
         content: "❌ You must run /start first!",
-        ephemeral: true
+        flags: 64
       });
     }
     return false;
@@ -45,7 +41,6 @@ module.exports = {
     try {
       const user = getUser(interaction.user.id);
 
-      // START CHECK (FIXED + SAFE)
       if (!requireStart(user, interaction)) return;
 
       const bet = interaction.options.getInteger("bet");
@@ -53,21 +48,21 @@ module.exports = {
       if (!Number.isFinite(bet) || bet <= 0) {
         return interaction.reply({
           content: "❌ Invalid bet",
-          ephemeral: true
+          flags: 64
         });
       }
 
-      if (user.money < bet) {
+      if ((user.money ?? 0) < bet) {
         return interaction.reply({
           content: "❌ Not enough money",
-          ephemeral: true
+          flags: 64
         });
       }
 
       if (activeGames.has(interaction.user.id)) {
         return interaction.reply({
           content: "❌ You already have an active blackjack game",
-          ephemeral: true
+          flags: 64
         });
       }
 
@@ -76,7 +71,7 @@ module.exports = {
       if (!game) {
         return interaction.reply({
           content: "❌ Failed to start game",
-          ephemeral: true
+          flags: 64
         });
       }
 
@@ -88,16 +83,12 @@ module.exports = {
         .addFields(
           {
             name: "🧑 You",
-            value: Array.isArray(game.player)
-              ? game.player.join(", ")
-              : String(game.player),
+            value: Array.isArray(game.player) ? game.player.join(", ") : String(game.player),
             inline: true
           },
           {
             name: "🎩 Dealer",
-            value: Array.isArray(game.dealer)
-              ? game.dealer.join(", ")
-              : String(game.dealer),
+            value: Array.isArray(game.dealer) ? game.dealer.join(", ") : String(game.dealer),
             inline: true
           },
           {
@@ -105,17 +96,17 @@ module.exports = {
             value: `${bet}`,
             inline: false
           }
-        )
-        .setFooter({ text: "Hit or Stand carefully..." });
+        );
 
+      // 🔥 FIXED: use ":" (matches router system)
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`hit_${interaction.user.id}`)
+          .setCustomId(`hit:${interaction.user.id}`)
           .setLabel("Hit")
           .setStyle(ButtonStyle.Primary),
 
         new ButtonBuilder()
-          .setCustomId(`stand_${interaction.user.id}`)
+          .setCustomId(`stand:${interaction.user.id}`)
           .setLabel("Stand")
           .setStyle(ButtonStyle.Danger)
       );
@@ -131,7 +122,7 @@ module.exports = {
       if (!interaction.replied) {
         return interaction.reply({
           content: "❌ Command failed safely",
-          ephemeral: true
+          flags: 64
         });
       }
     }

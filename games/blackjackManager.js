@@ -5,6 +5,13 @@ const games = new Map();
 const draw = () => Math.floor(Math.random() * 10) + 1;
 
 // =============================
+// SCORE HAND
+// =============================
+function score(hand) {
+  return hand.reduce((a, b) => a + b, 0);
+}
+
+// =============================
 // START GAME
 // =============================
 function start(userId, bet) {
@@ -13,18 +20,18 @@ function start(userId, bet) {
   if (!user || typeof user.money !== "number") return null;
   if (bet <= 0) return null;
   if (user.money < bet) return null;
-  if (games.has(userId)) return null; // prevent double game
+  if (games.has(userId)) return null;
 
-  // reserve bet safely
   user.money -= bet;
   saveUser(user);
 
   const game = {
     userId,
     bet,
-    player: draw() + draw(),
-    dealer: draw() + draw(),
+    player: [draw(), draw()],
+    dealer: [draw(), draw()],
     over: false,
+    lock: false,
     result: null
   };
 
@@ -37,14 +44,20 @@ function start(userId, bet) {
 // =============================
 function hit(userId) {
   const g = games.get(userId);
-  if (!g || g.over) return null;
+  if (!g || g.over || g.lock) return null;
 
-  g.player += draw();
+  g.lock = true;
 
-  if (g.player > 21) {
+  g.player.push(draw());
+
+  const pScore = score(g.player);
+
+  if (pScore > 21) {
+    g.lock = false;
     return end(userId, "lose");
   }
 
+  g.lock = false;
   return g;
 }
 
@@ -53,20 +66,31 @@ function hit(userId) {
 // =============================
 function stand(userId) {
   const g = games.get(userId);
-  if (!g || g.over) return null;
+  if (!g || g.over || g.lock) return null;
 
-  while (g.dealer < 17) {
-    g.dealer += draw();
+  g.lock = true;
+
+  let dScore = score(g.dealer);
+
+  while (dScore < 17) {
+    g.dealer.push(draw());
+    dScore = score(g.dealer);
   }
 
-  if (g.dealer > 21) return end(userId, "win");
-  if (g.player > g.dealer) return end(userId, "win");
-  if (g.player === g.dealer) return end(userId, "push");
-  return end(userId, "lose");
+  const pScore = score(g.player);
+
+  let result = "lose";
+
+  if (dScore > 21) result = "win";
+  else if (pScore > dScore) result = "win";
+  else if (pScore === dScore) result = "push";
+
+  g.lock = false;
+  return end(userId, result);
 }
 
 // =============================
-// END GAME (FIXED ECONOMY)
+// END GAME (SAFE ECONOMY)
 // =============================
 function end(userId, result) {
   const g = games.get(userId);
@@ -74,33 +98,22 @@ function end(userId, result) {
 
   const user = getUser(userId);
 
-  // IMPORTANT:
-  // bet was already deducted in start()
-
   if (result === "win") {
-    user.money += g.bet * 2; // return bet + winnings
+    user.money += g.bet * 2;
+  } else if (result === "push") {
+    user.money += g.bet;
   }
-
-  if (result === "push") {
-    user.money += g.bet; // refund
-  }
-
-  // lose = nothing
 
   saveUser(user);
 
   g.result = result;
   g.over = true;
 
-  games.set(userId, g);
-
   setTimeout(() => games.delete(userId), 10000);
 
   return g;
 }
 
-// =============================
-// HELPERS
 // =============================
 function getGame(userId) {
   return games.get(userId);

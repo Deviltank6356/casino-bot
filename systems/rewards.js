@@ -12,7 +12,6 @@ const BASE_REWARDS = {
   monthly: 30000
 };
 
-// safer streak scaling (caps growth)
 const STREAK_BONUS = {
   daily: 0.05,
   weekly: 0.08,
@@ -20,28 +19,37 @@ const STREAK_BONUS = {
 };
 
 // =============================
-// CLAIM REWARD
+// CLAIM REWARD (SAFE VERSION)
 // =============================
 function claim(id, type) {
   const user = getUser(id);
 
-  if (!TIMES[type]) {
+  // =============================
+  // VALIDATION (ANTI EXPLOIT)
+  // =============================
+  if (!user || typeof user !== "object") {
+    return { error: "User not found" };
+  }
+
+  if (!TIMES[type] || !BASE_REWARDS[type]) {
     return { error: "Invalid reward type" };
   }
 
-  if (!user.claims) user.claims = {};
-  if (!user.streaks) user.streaks = {};
+  // ensure safe defaults
+  user.claims ??= {};
+  user.streaks ??= {};
 
-  user.streaks[type] = Number(user.streaks[type] || 0);
+  user.claims[type] = Number(user.claims[type] || 0);
+  user.streaks[type] = Math.max(0, Number(user.streaks[type] || 0));
 
   const now = Date.now();
-  const lastClaim = Number(user.claims[type] || 0);
+  const lastClaim = user.claims[type];
   const cooldown = TIMES[type];
 
   // =============================
   // COOLDOWN CHECK
   // =============================
-  if (now - lastClaim < cooldown) {
+  if (lastClaim && now - lastClaim < cooldown) {
     const remaining = cooldown - (now - lastClaim);
 
     return {
@@ -50,31 +58,34 @@ function claim(id, type) {
   }
 
   // =============================
-  // STREAK LOGIC
+  // STREAK LOGIC (ANTI ABUSE)
   // =============================
-  const missed = now - lastClaim > cooldown * 2;
+  const missed = !lastClaim || now - lastClaim > cooldown * 2;
 
   if (missed) {
     user.streaks[type] = 1;
   } else {
-    user.streaks[type] += 1;
+    user.streaks[type] = Math.min(user.streaks[type] + 1, 1000); // 🔒 cap streak
   }
 
   const streak = user.streaks[type];
 
   // =============================
-  // REWARD CALCULATION (CONTROLLED GROWTH)
+  // REWARD CALCULATION (SAFE MATH)
   // =============================
   const base = BASE_REWARDS[type];
 
-  const multiplier = 1 + Math.min(streak * STREAK_BONUS[type], 2); 
-  // cap bonus at +200%
+  const bonus = Math.min(streak * STREAK_BONUS[type], 2); // max +200%
+  const multiplier = 1 + bonus;
 
-  const reward = Math.floor(base * multiplier);
+  const reward = Math.floor(Math.max(0, base * multiplier));
 
-  user.money = Number(user.money || 0) + reward;
+  // =============================
+  // APPLY MONEY (SAFE GUARD)
+  // =============================
+  user.money = Math.max(0, Number(user.money || 0) + reward);
 
-  // update claim time
+  // update claim timestamp
   user.claims[type] = now;
 
   saveUser(user);

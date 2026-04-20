@@ -5,7 +5,7 @@ const path = require("path");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("testcommands")
-    .setDescription("Validate all commands (owner only)"),
+    .setDescription("🧪 Full command validation system (owner only)"),
 
   async execute(interaction) {
     const baseDir = path.join(__dirname, "../../commands");
@@ -17,95 +17,120 @@ module.exports = {
     const errors = [];
     const seen = new Set();
 
-    function scan(dir) {
+    // =============================
+    // SAFE FILE SCAN (FIXED)
+    // =============================
+    async function scan(dir) {
       const files = fs.readdirSync(dir);
 
       for (const file of files) {
         const full = path.join(dir, file);
 
         if (fs.lstatSync(full).isDirectory()) {
-          scan(full);
+          await scan(full); // 🔥 FIXED
           continue;
         }
 
+        if (!file.endsWith(".js")) continue;
+
         total++;
 
-        try {
-          // clear cache so edits are tested properly
-          delete require.cache[require.resolve(full)];
+        const start = Date.now();
 
+        try {
+          delete require.cache[require.resolve(full)];
           const cmd = require(full);
 
-          // =========================
-          // VALIDATION
-          // =========================
-          if (!cmd || !cmd.data) {
-            failed++;
-            errors.push(`❌ ${file} → missing data`);
-            continue;
-          }
-
+          // =============================
+          // STRUCTURE CHECK
+          // =============================
+          if (!cmd?.data) throw new Error("Missing 'data'");
           if (typeof cmd.data.toJSON !== "function") {
-            failed++;
-            errors.push(`❌ ${file} → invalid SlashCommandBuilder`);
-            continue;
+            throw new Error("Invalid SlashCommandBuilder");
           }
 
           const json = cmd.data.toJSON();
 
-          if (!json?.name || typeof json.name !== "string") {
-            failed++;
-            errors.push(`❌ ${file} → invalid or missing name`);
-            continue;
-          }
+          if (!json?.name) throw new Error("Missing command name");
 
-          // =========================
-          // DUPLICATE CHECK
-          // =========================
+          // =============================
+          // DUPLICATES
+          // =============================
           if (seen.has(json.name)) {
-            failed++;
-            errors.push(`⚠️ duplicate command → ${json.name}`);
-            continue;
+            throw new Error(`Duplicate command: ${json.name}`);
           }
 
           seen.add(json.name);
+
+          // =============================
+          // EXEC CHECK
+          // =============================
+          if (typeof cmd.execute !== "function") {
+            throw new Error("Missing execute()");
+          }
+
+          const fakeInteraction = {
+            user: { id: "test" },
+            options: {
+              getString: () => null,
+              getInteger: () => null,
+              getUser: () => null
+            },
+            reply: async () => {},
+            deferReply: async () => {},
+            editReply: async () => {}
+          };
+
+          // safe execution test
+          await Promise.race([
+            cmd.execute(fakeInteraction, null),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Timeout > 1.5s")), 1500)
+            )
+          ]);
+
           passed++;
 
         } catch (err) {
           failed++;
-          errors.push(`💥 ${file} → ${err.message}`);
+          errors.push(`❌ ${file} → ${err.message}`);
         }
       }
     }
 
     try {
-      scan(baseDir);
+      await scan(baseDir); // 🔥 FIXED
     } catch (err) {
       return interaction.reply({
-        content: `❌ Fatal scan error: ${err.message}`,
+        content: `❌ Scan failed: ${err.message}`,
         ephemeral: true
       });
     }
 
-    // =========================
-    // OUTPUT
-    // =========================
+    // =============================
+    // REPORT
+    // =============================
+    const successRate = total
+      ? Math.floor((passed / total) * 100)
+      : 0;
+
     let output =
-      `🧪 **COMMAND TEST RESULTS**\n` +
-      `━━━━━━━━━━━━━━\n` +
+      `🧪 **COMMAND SYSTEM DIAGNOSTIC**\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📦 Total: ${total}\n` +
       `✅ Passed: ${passed}\n` +
       `❌ Failed: ${failed}\n` +
-      `━━━━━━━━━━━━━━\n`;
+      `📊 Success: ${successRate}%\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n`;
 
     if (errors.length > 0) {
-      output += errors.slice(0, 15).join("\n");
+      output += errors.slice(0, 10).join("\n");
 
-      if (errors.length > 15) {
-        output += `\n...and ${errors.length - 15} more errors`;
+      if (errors.length > 10) {
+        output += `\n... +${errors.length - 10} more`;
       }
     } else {
-      output += "🎉 All commands valid!";
+      output += "🎉 All commands passed validation!";
     }
 
     return interaction.reply({

@@ -5,7 +5,13 @@ const path = require("path");
 const db = new Database(path.join(__dirname, "casino.db"));
 
 // =============================
-// CREATE TABLE
+// PERFORMANCE OPTIMIZATION
+// =============================
+db.pragma("journal_mode = WAL");
+db.pragma("synchronous = NORMAL");
+
+// =============================
+// USERS TABLE
 // =============================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
@@ -30,12 +36,24 @@ CREATE TABLE IF NOT EXISTS users (
 `).run();
 
 // =============================
+// SAFE JSON HELPERS
+// =============================
+const parse = (v, fallback = {}) => {
+  try {
+    return v ? JSON.parse(v) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const str = (v) => JSON.stringify(v ?? {});
+
+// =============================
 // DEFAULT USER
 // =============================
 function defaultUser(id) {
   return {
     id,
-
     money: Number(config.startingMoney ?? 0),
     xp: Number(config.startingXP ?? 0),
     level: Number(config.startingLevel ?? 0),
@@ -49,33 +67,18 @@ function defaultUser(id) {
     },
 
     started: 0,
-
     spotifyLinked: 0,
     spotifyRefreshToken: null,
     lastChannelId: null,
-
     joinedAt: Date.now()
   };
 }
 
 // =============================
-// HELPERS
-// =============================
-const parse = (v, f = {}) => {
-  try {
-    return v ? JSON.parse(v) : f;
-  } catch {
-    return f;
-  }
-};
-
-const str = (v) => JSON.stringify(v ?? {});
-
-// =============================
 // GET USER
 // =============================
 function getUser(id) {
-  let row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
 
   if (!row) {
     const u = defaultUser(id);
@@ -108,60 +111,129 @@ function getUser(id) {
 
   return {
     id: row.id,
-    money: row.money,
-    xp: row.xp,
-    level: row.level,
-    bank: row.bank,
+    money: Number(row.money),
+    xp: Number(row.xp),
+    level: Number(row.level),
+    bank: Number(row.bank),
 
-    claims: parse(row.claims, {}),
-    streaks: parse(row.streaks, {}),
+    claims: parse(row.claims),
+    streaks: parse(row.streaks),
 
-    started: row.started,
-    spotifyLinked: row.spotifyLinked,
+    started: Number(row.started),
+    spotifyLinked: Number(row.spotifyLinked),
 
     spotifyRefreshToken: row.spotifyRefreshToken,
     lastChannelId: row.lastChannelId,
 
-    joinedAt: row.joinedAt
+    joinedAt: Number(row.joinedAt)
   };
 }
 
 // =============================
-// SAVE USER (STRICT DB WRITE)
+// 🔥 IMPROVED TRANSACTION QUEUE
+// =============================
+const queue = [];
+let processing = false;
+
+const MAX_QUEUE_SIZE = 500; // prevents RAM spike
+
+function runTransaction(task) {
+  return new Promise((resolve, reject) => {
+    if (queue.length > MAX_QUEUE_SIZE) {
+      return reject(new Error("DB queue overflow (too many writes)"));
+    }
+
+    queue.push({ task, resolve, reject });
+    processQueue();
+  });
+}
+
+async function processQueue() {
+  if (processing) return;
+  processing = true;
+
+  while (queue.length > 0) {
+    const job = queue.shift();
+
+    // 🧠 safety timeout per transaction (prevents stuck queue)
+    const timeout = setTimeout(() => {
+      job.reject(new Error("DB transaction timeout"));
+    }, 5000);
+
+    try {
+      const result = await job.task();
+      clearTimeout(timeout);
+      job.resolve(result);
+    } catch (err) {
+      clearTimeout(timeout);
+      job.reject(err);
+    }
+  }
+
+  processing = false;
+}
+
+// =============================
+// SAVE USER (QUEUED + SAFE)
 // =============================
 function saveUser(u) {
   if (!u?.id) throw new Error("Missing user.id");
 
-  db.prepare(`
-    UPDATE users SET
-      money = ?,
-      xp = ?,
-      level = ?,
-      bank = ?,
-      claims = ?,
-      streaks = ?,
-      started = ?,
-      spotifyLinked = ?,
-      spotifyRefreshToken = ?,
-      lastChannelId = ?
-    WHERE id = ?
-  `).run(
-    u.money ?? 0,
-    u.xp ?? 0,
-    u.level ?? 0,
-    u.bank ?? 0,
-    str(u.claims),
-    str(u.streaks),
-    u.started ?? 0,
-    u.spotifyLinked ?? 0,
-    u.spotifyRefreshToken ?? null,
-    u.lastChannelId ?? null,
-    u.id
-  );
+  const clean = {
+    id: u.id,
+    money: Number(u.money ?? 0),
+    xp: Number(u.xp ?? 0),
+    level: Number(u.level ?? 0),
+    bank: Number(u.bank ?? 0),
+
+    claims: u.claims ?? {},
+    streaks: u.streaks ?? {},
+
+    started: Number(u.started ?? 0),
+    spotifyLinked: Number(u.spotifyLinked ?? 0),
+
+    spotifyRefreshToken: u.spotifyRefreshToken ?? null,
+    lastChannelId: u.lastChannelId ?? null,
+
+    joinedAt: Number(u.joinedAt ?? Date.now())
+  };
+
+  return runTransaction(() => {
+    db.prepare(`
+      UPDATE users SET
+        money = ?,
+        xp = ?,
+        level = ?,
+        bank = ?,
+        claims = ?,
+        streaks = ?,
+        started = ?,
+        spotifyLinked = ?,
+        spotifyRefreshToken = ?,
+        lastChannelId = ?
+      WHERE id = ?
+    `).run(
+      clean.money,
+      clean.xp,
+      clean.level,
+      clean.bank,
+      str(clean.claims),
+      str(clean.streaks),
+      clean.started,
+      clean.spotifyLinked,
+      clean.spotifyRefreshToken,
+      clean.lastChannelId,
+      clean.id
+    );
+  });
 }
 
+// =============================
+// EXPORTS
+// =============================
 module.exports = {
   db,
   getUser,
-  saveUser
+  saveUser,
+  runTransaction
 };

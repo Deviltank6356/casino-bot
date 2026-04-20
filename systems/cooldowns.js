@@ -12,8 +12,10 @@ function check(userId, cmd, cooldown = DEFAULT_COOLDOWN) {
   const key = `${userId}:${cmd}`;
   const now = Date.now();
 
-  const cd = Number(cooldown);
-  const finalCooldown = Number.isFinite(cd) && cd > 0 ? cd : DEFAULT_COOLDOWN;
+  const finalCooldown =
+    Number.isFinite(cooldown) && cooldown > 0
+      ? cooldown
+      : DEFAULT_COOLDOWN;
 
   const expire = map.get(key);
 
@@ -24,20 +26,23 @@ function check(userId, cmd, cooldown = DEFAULT_COOLDOWN) {
 
   // set cooldown
   map.set(key, now + finalCooldown);
+
   return null;
 }
 
 // =============================
-// CLEANUP (optimized)
+// 🧹 CLEANUP (MEMORY SAFE)
 // =============================
 setInterval(() => {
   const now = Date.now();
 
-  for (const [key, expire] of map) {
+  // faster iteration + safe deletion
+  for (const [key, expire] of map.entries()) {
     if (expire <= now) {
       map.delete(key);
     }
   }
-}, 60000); // every 60s is enough (30s is unnecessary spam)
+}, 60000); // 1 minute is optimal (no need for 30s spam)
 
+// =============================
 module.exports = { check };

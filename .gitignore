@@ -1,3 +1,16 @@
 node_modules
-.env 
+.env
+.env.local
+.env.*.local
 config.json
+casino.db
+*.db
+*.sqlite3
+*.sqlite
+logs/
+*.logs
+.DS_Store
+Thumbs.db
+dst/
+build/
+leaderoard-worker/

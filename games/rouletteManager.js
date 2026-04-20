@@ -8,19 +8,50 @@ function spin() {
   return Math.floor(Math.random() * 37);
 }
 
+// =============================
+// SIMPLE LOCK (ANTI-SPAM)
+// =============================
+const locks = new Set();
+
 async function handle(i) {
   try {
     if (!i.customId) return;
 
     const parts = i.customId.split("_");
 
-    const type = parts[1];
-    const bet = Number(parts[2]);
+    const ownerId = parts[1];
+    const type = parts[2];
+    const bet = Number(parts[3]);
+
+    const lockKey = i.user.id;
+
+    // =============================
+    // OWNER CHECK
+    // =============================
+    if (ownerId && ownerId !== i.user.id) {
+      return i.reply({
+        content: "❌ This is not your game",
+        ephemeral: true
+      });
+    }
+
+    // =============================
+    // ANTI-SPAM LOCK
+    // =============================
+    if (locks.has(lockKey)) {
+      return i.reply({
+        content: "⏳ Wait for your current spin...",
+        ephemeral: true
+      });
+    }
+
+    locks.add(lockKey);
 
     // =============================
     // VALIDATION
     // =============================
     if (!type || !Number.isFinite(bet) || bet <= 0) {
+      locks.delete(lockKey);
       return i.update({
         content: "❌ Invalid roulette bet",
         components: []
@@ -30,6 +61,7 @@ async function handle(i) {
     const user = getUser(i.user.id);
 
     if ((user.money ?? 0) < bet) {
+      locks.delete(lockKey);
       return i.update({
         content: "❌ Not enough money",
         components: []
@@ -48,6 +80,7 @@ async function handle(i) {
     else if (type === "high") win = result >= 19 && result <= 36;
     else if (type === "low") win = result >= 1 && result <= 18;
     else {
+      locks.delete(lockKey);
       return i.update({
         content: "❌ Invalid bet type",
         components: []
@@ -59,9 +92,12 @@ async function handle(i) {
     user.money = (user.money ?? 0) + change;
     saveUser(user);
 
+    locks.delete(lockKey);
+
     return i.update({
       content:
-        `🎡 Result: ${result}\n` +
+        `🎡 **Roulette Result**\n` +
+        `🎯 Number: ${result}\n` +
         `💰 Change: ${change >= 0 ? "+" : ""}${change}\n` +
         `${win ? "🟢 WIN" : "🔴 LOSE"}`,
       components: []
@@ -75,11 +111,9 @@ async function handle(i) {
 
       return i.reply({
         content: "❌ Roulette error",
-        flags: 64
+        ephemeral: true
       });
-    } catch (e) {
-      console.error("ROULETTE FAILSAFE ERROR:", e);
-    }
+    } catch {}
   }
 }
 

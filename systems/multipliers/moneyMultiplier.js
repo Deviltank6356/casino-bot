@@ -9,10 +9,20 @@ boost = {
 */
 
 // =============================
-// ADD BOOST
+// ADD BOOST (SAFE + CONTROLLED)
 // =============================
 function addMultiplier(value, durationMs) {
-  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  value = Number(value);
+  durationMs = Number(durationMs);
+
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return null;
+
+  // anti exploit cap (prevents x100 spam boosts)
+  const MAX_SINGLE_BOOST = 10;
+  if (value > MAX_SINGLE_BOOST) value = MAX_SINGLE_BOOST;
+
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   boosts.push({
     id,
@@ -24,41 +34,63 @@ function addMultiplier(value, durationMs) {
 }
 
 // =============================
-// REMOVE BOOST (by ID instead of value)
+// REMOVE BOOST (by ID only)
 // =============================
 function removeMultiplier(id) {
+  if (!id) return false;
+
   const index = boosts.findIndex(b => b.id === id);
-  if (index !== -1) boosts.splice(index, 1);
+  if (index === -1) return false;
+
+  boosts.splice(index, 1);
+  return true;
 }
 
 // =============================
-// GET ACTIVE MULTIPLIER
+// CLEANUP EXPIRED BOOSTS
 // =============================
-function getMultiplier() {
+function cleanup() {
   const now = Date.now();
 
-  // remove expired boosts safely
   for (let i = boosts.length - 1; i >= 0; i--) {
     if (boosts[i].expiresAt <= now) {
       boosts.splice(i, 1);
     }
   }
-
-  // base multiplier
-  let total = 1;
-
-  for (const b of boosts) {
-    total *= b.value;
-  }
-
-  return total;
 }
 
 // =============================
-// OPTIONAL: DEBUG
+// GET ACTIVE MULTIPLIER (SAFE)
+// =============================
+function getMultiplier() {
+  cleanup();
+
+  let total = 1;
+
+  for (const b of boosts) {
+    const val = Number(b.value);
+
+    if (Number.isFinite(val) && val > 0) {
+      total *= val;
+    }
+  }
+
+  // safety cap (prevents economy breaking stacks)
+  const MAX_TOTAL_MULTIPLIER = 25;
+
+  return Math.min(total, MAX_TOTAL_MULTIPLIER);
+}
+
+// =============================
+// DEBUG (SAFE COPY)
 // =============================
 function getActiveBoosts() {
-  return boosts;
+  cleanup();
+  return boosts.map(b => ({
+    id: b.id,
+    value: b.value,
+    expiresAt: b.expiresAt
+  }));
 }
 
 module.exports = {
