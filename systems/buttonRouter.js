@@ -1,11 +1,16 @@
 const blackjack = require("../games/blackjackManager");
+const roulette = require("../games/rouletteManager");
 
 // =============================
 // BUTTON ROUTES
 // =============================
 const routes = {
+  // 🃏 Blackjack
   hit: blackjack.hit,
-  stand: blackjack.stand
+  stand: blackjack.stand,
+
+  // 🎡 Roulette (single entry point)
+  r: roulette.handle
 };
 
 // =============================
@@ -13,36 +18,52 @@ const routes = {
 // =============================
 async function handleButton(i) {
   try {
-    const [action, userId] = i.customId.split("_");
+    const parts = i.customId.split("_");
+    const action = parts[0];
 
-    // Ignore if not blackjack button
-    if (!routes[action]) return false;
+    // =============================
+    // BLACKJACK
+    // hit_userId
+    // stand_userId
+    // =============================
+    if (action === "hit" || action === "stand") {
+      const userId = parts[1];
 
-    // 🔒 SECURITY: only game owner can press buttons
-    if (userId && userId !== i.user.id) {
-      return i.reply({
-        content: "❌ This is not your game",
-        ephemeral: true
-      });
+      if (userId && userId !== i.user.id) {
+        return i.reply({
+          content: "❌ This is not your game",
+          ephemeral: true
+        });
+      }
+
+      const gameFn = routes[action];
+      if (!gameFn) return false;
+
+      return gameFn(i.user.id);
     }
 
-    const game = routes[action](i.user.id);
+    // =============================
+    // ROULETTE
+    // r_red_100
+    // r_black_50
+    // r_even_200
+    // =============================
+    if (action === "r") {
+      const rouletteHandler = routes.r;
 
-    if (!game) {
-      return i.reply({
-        content: "❌ No active game",
-        ephemeral: true
-      });
+      if (!rouletteHandler) return false;
+
+      return rouletteHandler(i);
     }
 
-    return game;
+    return false;
 
   } catch (err) {
-    console.error("BUTTON ERROR:", err);
+    console.error("BUTTON ROUTER ERROR:", err);
 
-    if (!i.replied) {
+    if (!i.replied && !i.deferred) {
       return i.reply({
-        content: "❌ Button error",
+        content: "❌ Button system error",
         ephemeral: true
       });
     }

@@ -1,6 +1,6 @@
 const map = new Map();
 
-const DEFAULT_COOLDOWN = 5000;
+const DEFAULT_COOLDOWN = 10000;
 
 // =============================
 // CLEANUP (runs every 30s)
