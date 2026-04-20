@@ -9,42 +9,78 @@ function spin() {
 }
 
 async function handle(i) {
-  const [_, type, bet] = i.customId.split("_");
+  try {
+    if (!i.customId) return;
 
-  const user = getUser(i.user.id);
-  const amount = Number(bet);
+    const parts = i.customId.split("_");
 
-  if ((user.money ?? 0) < amount) {
+    const type = parts[1];
+    const bet = Number(parts[2]);
+
+    // =============================
+    // VALIDATION
+    // =============================
+    if (!type || !Number.isFinite(bet) || bet <= 0) {
+      return i.update({
+        content: "❌ Invalid roulette bet",
+        components: []
+      });
+    }
+
+    const user = getUser(i.user.id);
+
+    if ((user.money ?? 0) < bet) {
+      return i.update({
+        content: "❌ Not enough money",
+        components: []
+      });
+    }
+
+    const result = spin();
+
+    let win = false;
+    const multiplier = 2;
+
+    if (type === "red") win = result !== 0 && isRed(result);
+    else if (type === "black") win = result !== 0 && !isRed(result);
+    else if (type === "even") win = result !== 0 && result % 2 === 0;
+    else if (type === "odd") win = result % 2 === 1;
+    else if (type === "high") win = result >= 19 && result <= 36;
+    else if (type === "low") win = result >= 1 && result <= 18;
+    else {
+      return i.update({
+        content: "❌ Invalid bet type",
+        components: []
+      });
+    }
+
+    const change = win ? bet * multiplier : -bet;
+
+    user.money = (user.money ?? 0) + change;
+    saveUser(user);
+
     return i.update({
-      content: "❌ Not enough money",
+      content:
+        `🎡 Result: ${result}\n` +
+        `💰 Change: ${change >= 0 ? "+" : ""}${change}\n` +
+        `${win ? "🟢 WIN" : "🔴 LOSE"}`,
       components: []
     });
+
+  } catch (err) {
+    console.error("ROULETTE MANAGER ERROR:", err);
+
+    try {
+      if (i.replied || i.deferred) return;
+
+      return i.reply({
+        content: "❌ Roulette error",
+        flags: 64
+      });
+    } catch (e) {
+      console.error("ROULETTE FAILSAFE ERROR:", e);
+    }
   }
-
-  const result = spin();
-
-  let win = false;
-  let multiplier = 2;
-
-  if (type === "red") win = result !== 0 && isRed(result);
-  if (type === "black") win = result !== 0 && !isRed(result);
-  if (type === "even") win = result !== 0 && result % 2 === 0;
-  if (type === "odd") win = result % 2 === 1;
-  if (type === "high") win = result >= 19;
-  if (type === "low") win = result >= 1 && result <= 18;
-
-  const change = win ? amount * multiplier : -amount;
-
-  user.money = (user.money ?? 0) + change;
-  saveUser(user);
-
-  return i.update({
-    content:
-      `🎡 Result: ${result}\n` +
-      `💰 Change: ${change >= 0 ? "+" : ""}${change}\n` +
-      `${win ? "🟢 WIN" : "🔴 LOSE"}`,
-    components: []
-  });
 }
 
 module.exports = { handle };
