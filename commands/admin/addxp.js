@@ -8,16 +8,10 @@ module.exports = {
     .setName("addxp")
     .setDescription("Add XP to a user")
     .addUserOption(o =>
-      o
-        .setName("user")
-        .setDescription("User")
-        .setRequired(true)
+      o.setName("user").setDescription("User").setRequired(true)
     )
     .addIntegerOption(o =>
-      o
-        .setName("amount")
-        .setDescription("XP amount")
-        .setRequired(true)
+      o.setName("amount").setDescription("XP amount").setRequired(true)
     ),
 
   async execute(i, client) {
@@ -33,7 +27,7 @@ module.exports = {
         return i.reply({ content: "❌ User not found", ephemeral: true });
       }
 
-      if (!amount || amount <= 0) {
+      if (!Number.isInteger(amount) || amount <= 0) {
         return i.reply({
           content: "❌ Invalid amount",
           ephemeral: true
@@ -42,12 +36,13 @@ module.exports = {
 
       const user = getUser(target.id);
 
-      // ✅ ADD XP
+      // 🔥 safety fix
+      if (typeof user.xp !== "number") user.xp = 0;
+
       user.xp += amount;
 
       saveUser(user);
 
-      // 🔒 SAFE LOGGING
       try {
         await logAdminAction(
           client,
@@ -59,15 +54,20 @@ module.exports = {
         console.error("LOG ERROR:", err);
       }
 
-      return i.reply(`⭐ Added ${amount} XP to ${target.username}`);
+      return i.reply({
+        content: `⭐ Added ${amount} XP to ${target.username}`,
+        ephemeral: false // change to true if you want hidden
+      });
 
     } catch (err) {
       console.error("ADDXP ERROR:", err);
 
-      return i.reply({
-        content: "❌ Error adding XP",
-        ephemeral: true
-      });
+      if (!i.replied) {
+        return i.reply({
+          content: "❌ Error adding XP",
+          ephemeral: true
+        });
+      }
     }
   }
 };

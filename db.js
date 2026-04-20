@@ -4,15 +4,15 @@ const path = require("path");
 
 const db = new Database(path.join(__dirname, "casino.db"));
 
-// =============================
-// DEFAULT USER
-// =============================
-function createDefaultUser() {
+// ======================================================
+// DEFAULT USER (single source of truth)
+// ======================================================
+function defaultUser() {
   return {
-    money: config.startingMoney ?? 0,
-    xp: config.startingXP ?? 0,
-    level: config.startingLevel ?? 0,
-    bank: config.startingBank ?? 0,
+    money: 0,
+    xp: 0,
+    level: 0,
+    bank: 0,
 
     claims: {},
     streaks: {
@@ -31,82 +31,92 @@ function createDefaultUser() {
   };
 }
 
-// =============================
+// ======================================================
 // TABLE
-// =============================
+// ======================================================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
 
-  money INTEGER DEFAULT 0,
-  xp INTEGER DEFAULT 0,
-  level INTEGER DEFAULT 0,
-  bank INTEGER DEFAULT 0,
+  money INTEGER NOT NULL DEFAULT 0,
+  xp INTEGER NOT NULL DEFAULT 0,
+  level INTEGER NOT NULL DEFAULT 0,
+  bank INTEGER NOT NULL DEFAULT 0,
 
-  claims TEXT DEFAULT '{}',
-  streaks TEXT DEFAULT '{}',
+  claims TEXT NOT NULL DEFAULT '{}',
+  streaks TEXT NOT NULL DEFAULT '{}',
 
-  started INTEGER DEFAULT 0,
+  started INTEGER NOT NULL DEFAULT 0,
 
-  spotifyLinked INTEGER DEFAULT 0,
+  spotifyLinked INTEGER NOT NULL DEFAULT 0,
   spotifyRefreshToken TEXT DEFAULT NULL,
   lastChannelId TEXT DEFAULT NULL,
 
-  joinedAt INTEGER DEFAULT (strftime('%s','now') * 1000)
+  joinedAt INTEGER NOT NULL
 );
 `).run();
 
-// =============================
-// SAFE PARSE
-// =============================
-function safeParse(v, fallback = {}) {
+// ======================================================
+// SAFE JSON
+// ======================================================
+function safeJSONParse(value, fallback) {
   try {
-    if (!v) return fallback;
-    return JSON.parse(v);
+    if (value === null || value === undefined || value === "") return fallback;
+    return JSON.parse(value);
   } catch {
     return fallback;
   }
 }
 
-function normalize(raw) {
-  const streaks = safeParse(raw.streaks);
+function safeJSONStringify(value) {
+  try {
+    return JSON.stringify(value ?? {});
+  } catch {
+    return "{}";
+  }
+}
+
+// ======================================================
+// NORMALIZE DB ROW → CLEAN OBJECT
+// ======================================================
+function normalize(row) {
+  const base = defaultUser();
+
+  if (!row) return base;
 
   return {
-    id: raw.id,
+    id: row.id,
 
-    money: Number(raw.money) || 0,
-    xp: Number(raw.xp) || 0,
-    level: Number(raw.level) || 0,
-    bank: Number(raw.bank) || 0,
+    money: Number(row.money ?? 0),
+    xp: Number(row.xp ?? 0),
+    level: Number(row.level ?? 0),
+    bank: Number(row.bank ?? 0),
 
-    claims: safeParse(raw.claims),
-
+    claims: safeJSONParse(row.claims, {}),
     streaks: {
-      daily: { count: 0, last: 0, ...(streaks.daily || {}) },
-      weekly: { count: 0, last: 0, ...(streaks.weekly || {}) },
-      monthly: { count: 0, last: 0, ...(streaks.monthly || {}) }
+      daily: { ...base.streaks.daily, ...(safeJSONParse(row.streaks, {}).daily || {}) },
+      weekly: { ...base.streaks.weekly, ...(safeJSONParse(row.streaks, {}).weekly || {}) },
+      monthly: { ...base.streaks.monthly, ...(safeJSONParse(row.streaks, {}).monthly || {}) }
     },
 
-    started: raw.started === 1 ? 1 : 0,
+    started: Number(row.started ?? 0) === 1 ? 1 : 0,
+    spotifyLinked: Number(row.spotifyLinked ?? 0) === 1 ? 1 : 0,
 
-    // 🔥 FIX: STRICT CHECK (prevents false negatives)
-    spotifyLinked: raw.spotifyLinked === 1 ? 1 : 0,
+    spotifyRefreshToken: row.spotifyRefreshToken ?? null,
+    lastChannelId: row.lastChannelId ?? null,
 
-    spotifyRefreshToken: raw.spotifyRefreshToken ?? null,
-    lastChannelId: raw.lastChannelId ?? null,
-
-    joinedAt: Number(raw.joinedAt) || Date.now()
+    joinedAt: Number(row.joinedAt ?? Date.now())
   };
 }
 
-// =============================
-// GET USER
-// =============================
+// ======================================================
+// GET USER (ALWAYS SAFE)
+// ======================================================
 function getUser(id) {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
 
   if (!row) {
-    const u = createDefaultUser();
+    const user = defaultUser();
 
     db.prepare(`
       INSERT INTO users (
@@ -118,30 +128,32 @@ function getUser(id) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
-      u.money,
-      u.xp,
-      u.level,
-      u.bank,
-      JSON.stringify(u.claims),
-      JSON.stringify(u.streaks),
-      u.started,
-      u.spotifyLinked,
-      u.spotifyRefreshToken,
-      u.lastChannelId,
-      u.joinedAt
+      user.money,
+      user.xp,
+      user.level,
+      user.bank,
+      safeJSONStringify(user.claims),
+      safeJSONStringify(user.streaks),
+      user.started,
+      user.spotifyLinked,
+      user.spotifyRefreshToken,
+      user.lastChannelId,
+      user.joinedAt
     );
 
-    return { id, ...u };
+    return { id, ...user };
   }
 
   return normalize(row);
 }
 
-// =============================
-// SAVE USER
-// =============================
+// ======================================================
+// SAVE USER (ANTI-DESYNC CORE)
+// ======================================================
 function saveUser(user) {
-  const u = normalize(user);
+  if (!user?.id) throw new Error("saveUser: missing user.id");
+
+  const clean = normalize(user);
 
   db.prepare(`
     UPDATE users SET
@@ -157,22 +169,40 @@ function saveUser(user) {
       lastChannelId = ?
     WHERE id = ?
   `).run(
-    u.money,
-    u.xp,
-    u.level,
-    u.bank,
-    JSON.stringify(u.claims),
-    JSON.stringify(u.streaks),
-    u.started,
-    u.spotifyLinked,
-    u.spotifyRefreshToken,
-    u.lastChannelId,
-    u.id
+    clean.money,
+    clean.xp,
+    clean.level,
+    clean.bank,
+    safeJSONStringify(clean.claims),
+    safeJSONStringify(clean.streaks),
+    clean.started,
+    clean.spotifyLinked,
+    clean.spotifyRefreshToken,
+    clean.lastChannelId,
+    clean.id
   );
+}
+
+// ======================================================
+// OPTIONAL: ATOMIC INCREMENT HELPERS (prevents race bugs)
+// ======================================================
+function addMoney(id, amount) {
+  db.prepare("UPDATE users SET money = money + ? WHERE id = ?").run(amount, id);
+}
+
+function addXP(id, amount) {
+  db.prepare("UPDATE users SET xp = xp + ? WHERE id = ?").run(amount, id);
+}
+
+function addBank(id, amount) {
+  db.prepare("UPDATE users SET bank = bank + ? WHERE id = ?").run(amount, id);
 }
 
 module.exports = {
   db,
   getUser,
-  saveUser
+  saveUser,
+  addMoney,
+  addXP,
+  addBank
 };

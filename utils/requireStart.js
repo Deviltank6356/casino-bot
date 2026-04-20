@@ -2,7 +2,6 @@ const { getUser } = require("../db");
 
 /**
  * Checks if user has started the game
- * AND sends error reply automatically if not
  */
 function requireStart(interaction) {
   try {
@@ -12,7 +11,7 @@ function requireStart(interaction) {
 
     if (started !== 1) {
       if (!interaction.replied && !interaction.deferred) {
-        interaction.reply({
+        return interaction.reply({
           content: "❌ You must run /start first!",
           ephemeral: true
         });
@@ -26,7 +25,7 @@ function requireStart(interaction) {
     console.error("requireStart ERROR:", err);
 
     if (!interaction.replied && !interaction.deferred) {
-      interaction.reply({
+      return interaction.reply({
         content: "❌ Failed to verify start status",
         ephemeral: true
       });

@@ -8,9 +8,27 @@ module.exports = {
     .setDescription("Begin your journey"),
 
   async execute(interaction) {
-    const user = getUser(interaction.user.id);
+    let user;
 
-    // 🔒 HARD BLOCK (DO NOT TRUST ANY OTHER CHECKS)
+    try {
+      user = getUser(interaction.user.id);
+    } catch (err) {
+      console.error("GET USER FAILED:", err);
+
+      return interaction.reply({
+        content: "❌ Failed to load your profile. Try again.",
+        ephemeral: true
+      });
+    }
+
+    // 🔧 FORCE FIX BROKEN USERS (after reset)
+    if (typeof user.started !== "number") user.started = 0;
+    if (typeof user.money !== "number") user.money = 0;
+    if (typeof user.bank !== "number") user.bank = 0;
+    if (typeof user.xp !== "number") user.xp = 0;
+    if (typeof user.level !== "number") user.level = 0;
+
+    // 🔒 already started
     if (user.started === 1) {
       return interaction.reply({
         content: "❌ You already ran /start",
@@ -18,15 +36,23 @@ module.exports = {
       });
     }
 
-    // set values
+    // ✅ initialise user safely
     user.money = config.startingMoney ?? 1000;
     user.bank = config.startingBank ?? 500;
     user.xp = 0;
     user.level = 0;
-
     user.started = 1;
 
-    saveUser(user);
+    try {
+      saveUser(user);
+    } catch (err) {
+      console.error("SAVE USER FAILED:", err);
+
+      return interaction.reply({
+        content: "❌ Failed to save your data.",
+        ephemeral: true
+      });
+    }
 
     return interaction.reply({
       content:

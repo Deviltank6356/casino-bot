@@ -36,25 +36,40 @@ module.exports = {
       }
 
       // =========================
-      // RESET DATABASE
+      // SAFE RESET (NO DELETE)
       // =========================
-      db.prepare("DELETE FROM users").run();
+      db.prepare(`
+        UPDATE users SET
+          money = 0,
+          xp = 0,
+          level = 0,
+          bank = 0,
+          claims = '{}',
+          streaks = '{}',
+          started = 0,
+          spotifyLinked = 0,
+          spotifyRefreshToken = NULL,
+          lastChannelId = NULL
+      `).run();
 
       // =========================
-      // LOG (safe)
+      // LOG (SAFE)
       // =========================
       try {
         await logAdminAction(
           client,
           interaction,
           "RESET ALL USERS",
-          `All user data wiped by owner (${interaction.user.tag})`
+          `All user data reset by owner (${interaction.user.tag})`
         );
       } catch (err) {
         console.error("LOG ERROR:", err);
       }
 
-      return interaction.reply("💥 All user data has been reset by the owner.");
+      return interaction.reply({
+        content: "💥 All user data has been safely reset.",
+        ephemeral: true
+      });
 
     } catch (err) {
       console.error("RESETALLUSERS ERROR:", err);
