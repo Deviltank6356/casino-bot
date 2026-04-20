@@ -5,7 +5,7 @@ const path = require("path");
 const db = new Database(path.join(__dirname, "casino.db"));
 
 // ======================================================
-// DEFAULT USER (single source of truth)
+// DEFAULT USER
 // ======================================================
 function defaultUser() {
   return {
@@ -59,30 +59,28 @@ CREATE TABLE IF NOT EXISTS users (
 // ======================================================
 // SAFE JSON
 // ======================================================
-function safeJSONParse(value, fallback) {
+function parseJSON(v, fallback) {
   try {
-    if (value === null || value === undefined || value === "") return fallback;
-    return JSON.parse(value);
+    if (v === null || v === undefined || v === "") return fallback;
+    return JSON.parse(v);
   } catch {
     return fallback;
   }
 }
 
-function safeJSONStringify(value) {
+function stringifyJSON(v) {
   try {
-    return JSON.stringify(value ?? {});
+    return JSON.stringify(v ?? {});
   } catch {
     return "{}";
   }
 }
 
 // ======================================================
-// NORMALIZE DB ROW → CLEAN OBJECT
+// NORMALIZE DB ROW ONLY (NEVER USED ON SAVE INPUT)
 // ======================================================
-function normalize(row) {
+function fromRow(row) {
   const base = defaultUser();
-
-  if (!row) return base;
 
   return {
     id: row.id,
@@ -92,11 +90,12 @@ function normalize(row) {
     level: Number(row.level ?? 0),
     bank: Number(row.bank ?? 0),
 
-    claims: safeJSONParse(row.claims, {}),
+    claims: parseJSON(row.claims, {}),
+
     streaks: {
-      daily: { ...base.streaks.daily, ...(safeJSONParse(row.streaks, {}).daily || {}) },
-      weekly: { ...base.streaks.weekly, ...(safeJSONParse(row.streaks, {}).weekly || {}) },
-      monthly: { ...base.streaks.monthly, ...(safeJSONParse(row.streaks, {}).monthly || {}) }
+      daily: { ...base.streaks.daily, ...(parseJSON(row.streaks, {}).daily || {}) },
+      weekly: { ...base.streaks.weekly, ...(parseJSON(row.streaks, {}).weekly || {}) },
+      monthly: { ...base.streaks.monthly, ...(parseJSON(row.streaks, {}).monthly || {}) }
     },
 
     started: Number(row.started ?? 0) === 1 ? 1 : 0,
@@ -110,13 +109,13 @@ function normalize(row) {
 }
 
 // ======================================================
-// GET USER (ALWAYS SAFE)
+// GET USER (SAFE)
 // ======================================================
 function getUser(id) {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
 
   if (!row) {
-    const user = defaultUser();
+    const u = defaultUser();
 
     db.prepare(`
       INSERT INTO users (
@@ -128,32 +127,52 @@ function getUser(id) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
-      user.money,
-      user.xp,
-      user.level,
-      user.bank,
-      safeJSONStringify(user.claims),
-      safeJSONStringify(user.streaks),
-      user.started,
-      user.spotifyLinked,
-      user.spotifyRefreshToken,
-      user.lastChannelId,
-      user.joinedAt
+      u.money,
+      u.xp,
+      u.level,
+      u.bank,
+      stringifyJSON(u.claims),
+      stringifyJSON(u.streaks),
+      u.started,
+      u.spotifyLinked,
+      u.spotifyRefreshToken,
+      u.lastChannelId,
+      u.joinedAt
     );
 
-    return { id, ...user };
+    return { id, ...u };
   }
 
-  return normalize(row);
+  return fromRow(row);
 }
 
 // ======================================================
-// SAVE USER (ANTI-DESYNC CORE)
+// SAVE USER (FIXED — NO NORMALIZE REUSE)
 // ======================================================
 function saveUser(user) {
   if (!user?.id) throw new Error("saveUser: missing user.id");
 
-  const clean = normalize(user);
+  const base = defaultUser();
+
+  const clean = {
+    id: user.id,
+
+    money: Number(user.money ?? 0),
+    xp: Number(user.xp ?? 0),
+    level: Number(user.level ?? 0),
+    bank: Number(user.bank ?? 0),
+
+    claims: user.claims ?? {},
+    streaks: user.streaks ?? base.streaks,
+
+    started: Number(user.started ?? 0),
+    spotifyLinked: Number(user.spotifyLinked ?? 0),
+
+    spotifyRefreshToken: user.spotifyRefreshToken ?? null,
+    lastChannelId: user.lastChannelId ?? null,
+
+    joinedAt: Number(user.joinedAt ?? Date.now())
+  };
 
   db.prepare(`
     UPDATE users SET
@@ -173,8 +192,8 @@ function saveUser(user) {
     clean.xp,
     clean.level,
     clean.bank,
-    safeJSONStringify(clean.claims),
-    safeJSONStringify(clean.streaks),
+    stringifyJSON(clean.claims),
+    stringifyJSON(clean.streaks),
     clean.started,
     clean.spotifyLinked,
     clean.spotifyRefreshToken,
@@ -184,18 +203,18 @@ function saveUser(user) {
 }
 
 // ======================================================
-// OPTIONAL: ATOMIC INCREMENT HELPERS (prevents race bugs)
+// HELPERS
 // ======================================================
-function addMoney(id, amount) {
-  db.prepare("UPDATE users SET money = money + ? WHERE id = ?").run(amount, id);
+function addMoney(id, amt) {
+  db.prepare("UPDATE users SET money = money + ? WHERE id = ?").run(amt, id);
 }
 
-function addXP(id, amount) {
-  db.prepare("UPDATE users SET xp = xp + ? WHERE id = ?").run(amount, id);
+function addXP(id, amt) {
+  db.prepare("UPDATE users SET xp = xp + ? WHERE id = ?").run(amt, id);
 }
 
-function addBank(id, amount) {
-  db.prepare("UPDATE users SET bank = bank + ? WHERE id = ?").run(amount, id);
+function addBank(id, amt) {
+  db.prepare("UPDATE users SET bank = bank + ? WHERE id = ?").run(amt, id);
 }
 
 module.exports = {
